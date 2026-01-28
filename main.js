@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const APP = document.getElementById("app");
 
-// Scene Setup
+// --- Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
@@ -16,14 +16,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 APP.appendChild(renderer.domElement);
 
-// Lights
-const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 2.5);
-scene.add(hemi);
+// --- Lights ---
+scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.5));
 const key = new THREE.DirectionalLight(0xffffff, 2.0);
 key.position.set(1, 1.2, 1.2);
 scene.add(key);
 
-// Mouse & Raycasting
+// --- Interaction & Raycasting ---
 const mouseNDC = new THREE.Vector2(0, 0);
 let hasPointer = false;
 
@@ -38,92 +37,76 @@ const raycaster = new THREE.Raycaster();
 const target = new THREE.Vector3(0, 0, 1);
 const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
-// Model State
+// --- Model State ---
 let model = null, eyeL = null, eyeR = null;
 const MAX_YAW = THREE.MathUtils.degToRad(25);
 const MAX_PITCH = THREE.MathUtils.degToRad(15);
 let yawSm = 0, pitchSm = 0;
 
-// UI Builders
+// --- UI Logic ---
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const makeMusclePanel = (el) => {
+function makeMusclePanel(el) {
   if (!el) return;
   let html = "";
   for (const m of MUSCLES) {
-    html += `
-      <div class="row">
-        <div>${m}</div>
-        <div class="barWrap"><div class="bar" data-muscle="${m}"></div></div>
-        <div class="pct" data-pct="${m}">0%</div>
-      </div>`;
+    html += `<div class="row"><div>${m}</div><div class="barWrap"><div class="bar" data-muscle="${m}"></div></div><div class="pct" data-pct="${m}">0%</div></div>`;
   }
   el.innerHTML += html;
-};
-
+}
 makeMusclePanel(document.getElementById("musclesL"));
 makeMusclePanel(document.getElementById("musclesR"));
 
-const updateUI = (panelId, acts) => {
+function updateUI(panelId, acts) {
   const panel = document.getElementById(panelId);
   if (!panel) return;
   for (const m of MUSCLES) {
     const bar = panel.querySelector(`.bar[data-muscle="${m}"]`);
     const pct = panel.querySelector(`.pct[data-pct="${m}"]`);
-    const v = Math.max(0, Math.min(1, acts[m] ?? 0));
+    const v = THREE.MathUtils.clamp(acts[m] ?? 0, 0, 1);
     bar.style.width = `${Math.round(v * 100)}%`;
     pct.textContent = `${Math.round(v * 100)}%`;
   }
-};
+}
 
 function getMuscleActs(isRight, yNorm, pNorm) {
   const r = Math.max(0, yNorm), l = Math.max(0, -yNorm);
   const u = Math.max(0, pNorm), d = Math.max(0, -pNorm);
-  return {
-    LR: isRight ? r : l,
-    MR: isRight ? l : r,
-    SR: u * 0.8, IR: d * 0.8, SO: d * 0.6, IO: u * 0.6
-  };
+  return { LR: isRight ? r : l, MR: isRight ? l : r, SR: u * 0.8, IR: d * 0.8, SO: d * 0.6, IO: u * 0.6 };
 }
 
-// Load GLB
+// --- Load GLB ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   scene.add(model);
 
-  console.log("--- DIAGNOSTIC: MESH NAMES FOUND ---");
+  console.log("--- New Export Node List ---");
   model.traverse(o => {
-    if (o.isMesh || o.isGroup || o.isBone) {
-      console.log("Node:", o.name);
-      
-      // Step 1: Implement Fuzzy Search for Eyes
-      const name = o.name.toLowerCase();
-      if (name.includes("eye")) {
-        if (name.includes("_l") || name.includes("left")) {
-          eyeL = o;
-          console.log(">>> Assigned to eyeL");
-        } else if (name.includes("_r") || name.includes("right")) {
-          eyeR = o;
-          console.log(">>> Assigned to eyeR");
-        }
-      }
-    }
+    console.log("Found:", o.name);
     
-    // Transparency Fix
+    // We search for the names you just set in Blender
+    if (o.name === "Eye_L") eyeL = o;
+    if (o.name === "Eye_R") eyeR = o;
+
+    // Transparency fix
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach(m => { if(m.transparent) m.depthWrite = false; });
     }
   });
-  console.log("------------------------------------");
 
-  // Center model
+  // Auto-Center
   const box = new THREE.Box3().setFromObject(model);
   const center = box.getCenter(new THREE.Vector3());
   model.position.sub(center);
 
-  if (!eyeL || !eyeR) console.warn("Eyes not automatically found. Check console for names.");
+  if (!eyeL || !eyeR) {
+    console.error("COULD NOT FIND Eye_L or Eye_R. Check the 'New Export Node List' above in the console.");
+  } else {
+    console.log("SUCCESS: Eyes connected.");
+  }
 });
 
+// --- Animation Loop ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -135,24 +118,22 @@ function animate() {
       target.lerp(new THREE.Vector3(0, 0, 1), 0.05);
     }
 
-    // Calculate rotation relative to model center
+    // Look math
     const yawDes = Math.atan2(target.x, target.z + 0.5);
     const pitchDes = Math.atan2(-target.y, target.z + 0.5);
 
     yawSm = THREE.MathUtils.lerp(yawSm, THREE.MathUtils.clamp(yawDes, -MAX_YAW, MAX_YAW), 0.1);
     pitchSm = THREE.MathUtils.lerp(pitchSm, THREE.MathUtils.clamp(pitchDes, -MAX_PITCH, MAX_PITCH), 0.1);
 
-    // Apply rotation (Y = Left/Right, X = Up/Down)
+    // Apply rotations
     eyeL.rotation.y = yawSm;
     eyeL.rotation.x = pitchSm;
     eyeR.rotation.y = yawSm;
     eyeR.rotation.x = pitchSm;
 
-    // UI Updates
     updateUI("musclesL", getMuscleActs(false, yawSm/MAX_YAW, pitchSm/MAX_PITCH));
     updateUI("musclesR", getMuscleActs(true, yawSm/MAX_YAW, pitchSm/MAX_PITCH));
   }
-
   renderer.render(scene, camera);
 }
 animate();
