@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Eye Tracking Demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    /* overlay UI */
+    #hud {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      color: #fff;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.25;
+      user-select: none;
+      pointer-events: none;
+      max-width: 360px;
+    }
+    .panel {
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .row { display: grid; grid-template-columns: 46px 1fr 40px; gap: 8px; align-items: center; margin: 4px 0; }
+    .barWrap { height: 8px; background: rgba(255,255,255,0.12); border-radius: 999px; overflow: hidden; }
+    .bar { height: 100%; width: 0%; background: rgba(255,255,255,0.85); }
+    .cnRow { display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      opacity: 0.35;
+    }
+    .pill.on { opacity: 1; background: rgba(255,255,255,0.18); }
+    #note { opacity: 0.75; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="hud">
+    <div class="panel">
+      <div>Muscle recruitment estimate</div>
+      <div id="note">Illustrative only, derived from gaze angles.</div>
+    </div>
+
+    <div class="panel" id="musclesL"><div>Eye L</div></div>
+    <div class="panel" id="musclesR"><div>Eye R</div></div>
+
+    <div class="panel">
+      <div>Cranial nerves</div>
+      <div class="cnRow">
+        <div class="pill" id="cn3">CN III</div>
+        <div class="pill" id="cn4">CN IV</div>
+        <div class="pill" id="cn6">CN VI</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
