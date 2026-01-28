@@ -96,6 +96,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach(m => { if(m.transparent) m.depthWrite = false; });
     }
+    model.traverse(o => { if(o.isMesh) console.log("Mesh name:", o.name); });
   });
 
   // Center model
@@ -152,3 +153,4 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
