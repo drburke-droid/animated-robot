@@ -7,23 +7,23 @@ const APP = document.getElementById("app");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-// Camera at a safe distance
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 5); 
+// Perspective Camera: Added more breathing room with a 45 FOV
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(0, 0, 4); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 APP.appendChild(renderer.domElement);
 
 // Lights
-scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.5));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2.0));
 const key = new THREE.DirectionalLight(0xffffff, 2.0);
-key.position.set(2, 2, 5);
+key.position.set(5, 5, 5);
 scene.add(key);
 
-// Interaction
+// Interaction Logic
 const mouseNDC = new THREE.Vector2(0, 0);
 let hasPointer = false;
 
@@ -35,7 +35,7 @@ window.addEventListener("pointermove", (e) => {
 }, { passive: true });
 
 const raycaster = new THREE.Raycaster();
-const target = new THREE.Vector3(0, 0, 1);
+const target = new THREE.Vector3(0, 0, 1.5);
 const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1); 
 
 let model = null, eyeL = null, eyeR = null;
@@ -43,7 +43,7 @@ const MAX_YAW = THREE.MathUtils.degToRad(25);
 const MAX_PITCH = THREE.MathUtils.degToRad(15);
 let yawSm = 0, pitchSm = 0;
 
-// UI 
+// UI Building
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const makeMusclePanel = (id) => {
   const el = document.getElementById(id);
@@ -79,19 +79,19 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   scene.add(model);
 
-  // 1. NORMALIZE SCALE AND POSITION
+  // Measure and normalize scale
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
-  // Rescale model to fit in a 2x2x2 cube
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 2 / maxDim;
+  // Force the head to be roughly 1.5 units tall
+  const scale = 1.5 / size.y;
   model.scale.setScalar(scale);
 
-  // Reposition so the center of the head is at (0,0,0)
+  // Position so the head is centered, but shift it down slightly (y: -0.2)
+  // so the forehead isn't cut off and eyes are at a natural height
   model.position.x = -center.x * scale;
-  model.position.y = -center.y * scale;
+  model.position.y = (-center.y * scale) - 0.2; 
   model.position.z = -center.z * scale;
 
   model.traverse(o => {
@@ -115,10 +115,9 @@ function animate() {
       raycaster.setFromCamera(mouseNDC, camera);
       raycaster.ray.intersectPlane(gazePlane, target);
     } else {
-      target.lerp(new THREE.Vector3(0, 0, 1), 0.05);
+      target.lerp(new THREE.Vector3(0, 0, 1.5), 0.05);
     }
 
-    // World to Local math for Eye L
     const localT = new THREE.Vector3().copy(target);
     eyeL.worldToLocal(localT);
     
