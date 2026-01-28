@@ -36,7 +36,7 @@ window.addEventListener("pointermove", (e) => {
 
 const raycaster = new THREE.Raycaster();
 const target = new THREE.Vector3(0, 0, 1);
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // Plane at z=0
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
 // Model State
 let model = null, eyeL = null, eyeR = null;
@@ -44,11 +44,11 @@ const MAX_YAW = THREE.MathUtils.degToRad(25);
 const MAX_PITCH = THREE.MathUtils.degToRad(15);
 let yawSm = 0, pitchSm = 0;
 
-// UI Helpers
+// UI Builders
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const makeMusclePanel = (el) => {
   if (!el) return;
-  let html = el.innerHTML;
+  let html = "";
   for (const m of MUSCLES) {
     html += `
       <div class="row">
@@ -57,7 +57,7 @@ const makeMusclePanel = (el) => {
         <div class="pct" data-pct="${m}">0%</div>
       </div>`;
   }
-  el.innerHTML = html;
+  el.innerHTML += html;
 };
 
 makeMusclePanel(document.getElementById("musclesL"));
@@ -90,25 +90,38 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   scene.add(model);
 
-  // Transparency Fix
+  console.log("--- DIAGNOSTIC: MESH NAMES FOUND ---");
   model.traverse(o => {
+    if (o.isMesh || o.isGroup || o.isBone) {
+      console.log("Node:", o.name);
+      
+      // Step 1: Implement Fuzzy Search for Eyes
+      const name = o.name.toLowerCase();
+      if (name.includes("eye")) {
+        if (name.includes("_l") || name.includes("left")) {
+          eyeL = o;
+          console.log(">>> Assigned to eyeL");
+        } else if (name.includes("_r") || name.includes("right")) {
+          eyeR = o;
+          console.log(">>> Assigned to eyeR");
+        }
+      }
+    }
+    
+    // Transparency Fix
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach(m => { if(m.transparent) m.depthWrite = false; });
     }
-    model.traverse(o => { if(o.isMesh) console.log("Mesh name:", o.name); });
   });
+  console.log("------------------------------------");
 
   // Center model
   const box = new THREE.Box3().setFromObject(model);
   const center = box.getCenter(new THREE.Vector3());
   model.position.sub(center);
 
-  // CORRECTED NAMES
-  eyeL = model.getObjectByName("Eye_L");
-  eyeR = model.getObjectByName("Eye_R");
-
-  if (!eyeL || !eyeR) console.warn("Eye_L or Eye_R not found in model hierarchy.");
+  if (!eyeL || !eyeR) console.warn("Eyes not automatically found. Check console for names.");
 });
 
 function animate() {
@@ -122,18 +135,14 @@ function animate() {
       target.lerp(new THREE.Vector3(0, 0, 1), 0.05);
     }
 
-    // Calculate rotation angles relative to eye positions
-    // We look towards +Z, so we calculate angle from the eye origin to target
-    const lookAtTarget = new THREE.Vector3().copy(target);
-    
-    // Simple conjugate gaze math
-    const yawDes = Math.atan2(lookAtTarget.x, lookAtTarget.z + 0.5);
-    const pitchDes = Math.atan2(-lookAtTarget.y, lookAtTarget.z + 0.5);
+    // Calculate rotation relative to model center
+    const yawDes = Math.atan2(target.x, target.z + 0.5);
+    const pitchDes = Math.atan2(-target.y, target.z + 0.5);
 
     yawSm = THREE.MathUtils.lerp(yawSm, THREE.MathUtils.clamp(yawDes, -MAX_YAW, MAX_YAW), 0.1);
     pitchSm = THREE.MathUtils.lerp(pitchSm, THREE.MathUtils.clamp(pitchDes, -MAX_PITCH, MAX_PITCH), 0.1);
 
-    // Apply to Three.js Y-axis (Yaw) and X-axis (Pitch)
+    // Apply rotation (Y = Left/Right, X = Up/Down)
     eyeL.rotation.y = yawSm;
     eyeL.rotation.x = pitchSm;
     eyeR.rotation.y = yawSm;
@@ -153,4 +162,3 @@ window.addEventListener("resize", () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
