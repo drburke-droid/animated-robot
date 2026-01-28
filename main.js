@@ -3,7 +3,6 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const APP = document.getElementById("app");
 // ... rest of your code stays the same
-const APP = document.getElementById("app");
 
 // Scene
 const scene = new THREE.Scene();
@@ -262,5 +261,6 @@ window.addEventListener(
   },
   { passive: true }
 );
+
 
 
