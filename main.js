@@ -7,9 +7,9 @@ const APP = document.getElementById("app");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
 
-// Set camera further back so the head isn't filling the whole screen
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 2.5); 
+// Camera at a safe distance
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 5); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -20,7 +20,7 @@ APP.appendChild(renderer.domElement);
 // Lights
 scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.5));
 const key = new THREE.DirectionalLight(0xffffff, 2.0);
-key.position.set(1, 1.2, 1.2);
+key.position.set(2, 2, 5);
 scene.add(key);
 
 // Interaction
@@ -36,23 +36,22 @@ window.addEventListener("pointermove", (e) => {
 
 const raycaster = new THREE.Raycaster();
 const target = new THREE.Vector3(0, 0, 1);
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.5); 
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1); 
 
 let model = null, eyeL = null, eyeR = null;
-const MAX_YAW = THREE.MathUtils.degToRad(30);
-const MAX_PITCH = THREE.MathUtils.degToRad(20);
+const MAX_YAW = THREE.MathUtils.degToRad(25);
+const MAX_PITCH = THREE.MathUtils.degToRad(15);
 let yawSm = 0, pitchSm = 0;
 
-// UI Building
+// UI 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const makeMusclePanel = (id) => {
   const el = document.getElementById(id);
   if (!el) return;
-  let html = "";
+  el.innerHTML = "";
   MUSCLES.forEach(m => {
-    html += `<div class="row"><div>${m}</div><div class="barWrap"><div class="bar" data-muscle="${m}"></div></div><div class="pct" data-pct="${m}">0%</div></div>`;
+    el.innerHTML += `<div class="row"><div>${m}</div><div class="barWrap"><div class="bar" data-muscle="${m}"></div></div><div class="pct" data-pct="${m}">0%</div></div>`;
   });
-  el.innerHTML = html;
 };
 makeMusclePanel("musclesL");
 makeMusclePanel("musclesR");
@@ -80,22 +79,30 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   scene.add(model);
 
+  // 1. NORMALIZE SCALE AND POSITION
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+
+  // Rescale model to fit in a 2x2x2 cube
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const scale = 2 / maxDim;
+  model.scale.setScalar(scale);
+
+  // Reposition so the center of the head is at (0,0,0)
+  model.position.x = -center.x * scale;
+  model.position.y = -center.y * scale;
+  model.position.z = -center.z * scale;
+
   model.traverse(o => {
-    // These names match your diagnostic log
     if (o.name === "Eye_L") eyeL = o;
     if (o.name === "Eye_R") eyeR = o;
-    
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       mats.forEach(m => { if(m.transparent) m.depthWrite = false; });
     }
   });
 
-  // Manual Centering: Just place the head at the origin
-  const box = new THREE.Box3().setFromObject(model);
-  const center = box.getCenter(new THREE.Vector3());
-  model.position.set(-center.x, -center.y, -center.z);
-  
   camera.lookAt(0, 0, 0);
   model.updateMatrixWorld(true);
 });
@@ -115,15 +122,12 @@ function animate() {
     const localT = new THREE.Vector3().copy(target);
     eyeL.worldToLocal(localT);
     
-    // Calculate angles (Assumes Z is forward)
     const yawVal = Math.atan2(localT.x, localT.z);
     const pitchVal = Math.atan2(-localT.y, localT.z);
 
-    // Smoothing
     yawSm = THREE.MathUtils.lerp(yawSm, THREE.MathUtils.clamp(yawVal, -MAX_YAW, MAX_YAW), 0.1);
     pitchSm = THREE.MathUtils.lerp(pitchSm, THREE.MathUtils.clamp(pitchVal, -MAX_PITCH, MAX_PITCH), 0.1);
 
-    // Apply to both eyes
     eyeL.rotation.set(pitchSm, yawSm, 0, 'YXZ');
     eyeR.rotation.set(pitchSm, yawSm, 0, 'YXZ');
 
