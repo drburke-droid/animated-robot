@@ -182,7 +182,7 @@ loader.load(
 
     // Find eyes by name
     eyeL = model.getObjectByName("Eye_L");
-    eyeR = model.getObjectByName("Eye_R");
+    eyeR = model.getObjectByName("Eye_L001");
 
     if (!eyeL || !eyeR) {
       console.error("Could not find Eye_L / Eye_R. Use the printed node list to match names.");
@@ -262,4 +262,5 @@ window.addEventListener(
   },
   { passive: true }
 );
+
 
