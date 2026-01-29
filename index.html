@@ -2,97 +2,144 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Anatomical Eye Tracking Simulation</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    /* 1. Global Reset & Layout */
+    html, body { 
+      margin: 0; 
+      height: 100%; 
+      overflow: hidden; 
+      background: #000; 
+      color: #fff; 
+      font-family: system-ui, -apple-system, sans-serif; 
+    }
+    
     #app { position: fixed; inset: 0; }
     canvas { display: block; }
 
-    /* HUD Layout: Splits panels to the far left and right */
-    #hud {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 40px;
-      color: #fff;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-size: 13px;
-      line-height: 1.25;
-      user-select: none;
-      pointer-events: none;
+    /* 2. HUD Positioning */
+    #hud { 
+      position: fixed; 
+      inset: 0; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      padding: 0 40px; 
+      pointer-events: none; 
+      z-index: 5;
     }
 
-    /* Central Info Container */
-    #top-hud {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
-      pointer-events: none;
+    #top-hud { 
+      position: fixed; 
+      top: 20px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+      pointer-events: none; 
       z-index: 10;
     }
 
-    .panel {
-      background: rgba(10,10,10,0.75);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 12px;
-      padding: 15px;
-      width: 190px;
-      backdrop-filter: blur(8px);
+    /* 3. Panel Styling */
+    .panel { 
+      background: rgba(15, 15, 15, 0.85); 
+      border: 1px solid rgba(255, 255, 255, 0.1); 
+      border-radius: 12px; 
+      padding: 15px; 
+      width: 200px; 
+      backdrop-filter: blur(10px);
     }
 
-    .panel-title {
-      font-weight: 700;
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      padding-bottom: 6px;
-      text-transform: uppercase;
+    .panel-title { 
+      color: #4cc9f0; 
+      font-weight: 800; 
+      margin-bottom: 12px; 
+      font-size: 11px; 
+      text-transform: uppercase; 
       letter-spacing: 0.1em;
-      font-size: 11px;
+      border-bottom: 1px solid rgba(76, 201, 240, 0.3);
+      padding-bottom: 5px;
+    }
+
+    /* 4. Gauge & Row Styling */
+    .row { 
+      display: grid; 
+      grid-template-columns: 35px 1fr 35px; 
+      gap: 10px; 
+      align-items: center; 
+      margin: 10px 0; 
+    }
+
+    .label { 
+      font-weight: bold; 
+      font-size: 11px; 
+      color: rgba(255, 255, 255, 0.7); 
+    }
+
+    .barWrap { 
+      height: 6px; 
+      background: rgba(255, 255, 255, 0.05); 
+      border-radius: 10px; 
+      overflow: hidden; 
+    }
+
+    .bar { 
+      height: 100%; 
+      width: 20%; /* Matches basal tone of 0.20 */
+      background: #4cc9f0; 
+      box-shadow: 0 0 10px rgba(76, 201, 240, 0.4);
+      transition: width 0.1s ease-out; 
+    }
+
+    .pct { 
+      font-family: 'Courier New', Courier, monospace; 
+      font-size: 10px; 
+      text-align: right; 
       color: #4cc9f0;
     }
 
-    /* Row Setup for the 12 dynamic muscles */
-    .row { display: grid; grid-template-columns: 35px 1fr 35px; gap: 10px; align-items: center; margin: 8px 0; }
-    .barWrap { height: 6px; background: rgba(255,255,255,0.1); border-radius: 99px; overflow: hidden; }
-    .bar { height: 100%; width: 0%; background: #4cc9f0; box-shadow: 0 0 8px rgba(76, 201, 240, 0.6); }
+    /* 5. Cranial Nerve Pills */
+    .cnRow { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
     
-    .m-label { font-weight: bold; color: rgba(255,255,255,0.8); font-size: 11px; }
-    .pct { font-family: 'Courier New', Courier, monospace; text-align: right; font-size: 11px; color: #4cc9f0; }
-
-    .cnRow { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
-    .pill {
-      padding: 6px 14px;
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(20,20,20,0.8);
+    .pill { 
+      padding: 6px 14px; 
+      border-radius: 20px; 
+      border: 1px solid rgba(255, 255, 255, 0.1); 
+      background: rgba(255, 255, 255, 0.05);
+      opacity: 0.2; 
+      font-size: 10px; 
       font-weight: bold;
-      font-size: 10px;
       transition: all 0.3s ease;
-      opacity: 0.2;
     }
-    /* Activation color for Cranial Nerves */
-    .pill.on { opacity: 1; background: #f72585; border-color: #ff4d6d; box-shadow: 0 0 15px rgba(247, 37, 133, 0.5); color: #fff; }
-    
-    #note { opacity: 0.5; font-size: 9px; margin-top: 6px; font-style: italic; }
+
+    .pill.on { 
+      opacity: 1; 
+      background: #f72585; 
+      border-color: #ff4d6d; 
+      box-shadow: 0 0 15px rgba(247, 37, 133, 0.6);
+    }
+
+    #note { 
+      opacity: 0.4; 
+      font-size: 9px; 
+      margin-top: 8px; 
+      text-align: center; 
+      font-style: italic; 
+    }
   </style>
 </head>
 <body>
+
   <div id="app"></div>
 
   <div id="top-hud">
-    <div class="panel" style="width: auto; min-width: 260px;">
-      <div class="panel-title" style="color: #fff;">Cranial Nerve Activation</div>
+    <div class="panel" style="width: auto; min-width: 280px;">
+      <div class="panel-title" style="text-align: center; color: #fff;">Cranial Nerve Recruitment</div>
       <div class="cnRow">
         <div class="pill" id="cn3">CN III</div>
         <div class="pill" id="cn4">CN IV</div>
         <div class="pill" id="cn6">CN VI</div>
       </div>
-      <div id="note">Real-time recruitment based on Extraocular geometry.</div>
+      <div id="note">Calculated via Vector Decomposition of Gaze.</div>
     </div>
   </div>
 
@@ -116,5 +163,6 @@
   </script>
 
   <script type="module" src="./main.js"></script>
+
 </body>
 </html>
