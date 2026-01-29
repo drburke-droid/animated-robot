@@ -2,17 +2,17 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 5 };
+const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Flipped Labels & Physical Sides) ---
+// --- 1. UI Initialization ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Left Eye (OS)" },  // Box on Screen-Left
-    { id: "musclesR", key: "right", label: "Right Eye (OD)" } // Box on Screen-Right
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" },
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" }
   ];
 
   sides.forEach(s => {
@@ -84,18 +84,26 @@ const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// --- 3. Events (Mouse Move & Wheel Zoom) ---
+// --- 3. Events (Fixed Zoom & Resize) ---
 window.addEventListener("pointermove", (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   APP_STATE.hasPointer = true;
 });
 
+// Improved Wheel Zoom Logic
 window.addEventListener("wheel", (e) => {
+  e.preventDefault(); // Prevents page scrolling
   APP_STATE.zoom += e.deltaY * 0.005;
-  APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom, 2, 10);
+  APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom, 2.5, 12);
   camera.position.z = APP_STATE.zoom;
-}, { passive: true });
+}, { passive: false });
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
 initUI();
 
@@ -106,7 +114,11 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   const size = box.getSize(new THREE.Vector3());
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
-  model.position.y = -0.6; // Lowered head position
+
+  // POSITION FIX: 
+  // Lowering the head significantly so the eyes are centered.
+  // Current offset -1.1 pushes the chin toward the bottom and eyes toward midline.
+  model.position.y = -1.1; 
 
   model.traverse(o => {
     if (o.isMesh) {
@@ -148,7 +160,6 @@ function animate() {
     penlight.position.copy(targetVec);
   }
 
-  // --- MAPPING REVERSED PER REQUEST ---
   const configs = [
     { mesh: eyeL, isRight: false, side: "left" }, 
     { mesh: eyeR, isRight: true, side: "right" }
@@ -182,7 +193,6 @@ function animate() {
     else APP_STATE.currentActsL = acts;
   });
 
-  // Nerve Status
   const t = 0.28;
   const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
   if (aL && aR) {
