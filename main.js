@@ -2,11 +2,20 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const APP = document.getElementById("app");
+const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
+
+// Cache UI elements so we don't query the DOM 60 times per second
+const uiCache = {
+  left: {},
+  right: {},
+  cn3: document.getElementById("cn3"),
+  cn4: document.getElementById("cn4"),
+  cn6: document.getElementById("cn6")
+};
 
 // --- 1. Scene & Camera ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
-
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.01, 100);
 camera.position.set(0, 0, 5); 
 
@@ -22,7 +31,7 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.5));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
 keyLight.position.set(5, 5, 5);
 keyLight.castShadow = true;
-keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.mapSize.set(1024, 1024); // Lowered slightly for performance
 keyLight.shadow.bias = -0.0005; 
 keyLight.shadow.normalBias = 0.05;
 scene.add(keyLight);
@@ -46,13 +55,8 @@ const MAX_YAW = THREE.MathUtils.degToRad(30);
 const MAX_PITCH = THREE.MathUtils.degToRad(22);
 let yawSm = 0, pitchSm = 0;
 
-const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-
-/**
- * High Accuracy Anatomy Recruitment
- */
 function getMuscleActs(isRight, yN, pN) {
-  const tone = 0.20; // 20% Basal Tone
+  const tone = 0.20; 
   const range = 0.80; 
 
   const abduct = isRight ? Math.max(0, yN) : Math.max(0, -yN); 
@@ -74,43 +78,44 @@ function getMuscleActs(isRight, yN, pN) {
   };
 }
 
-// --- 5. UI Helpers (Safety First) ---
-function makeMusclePanel(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  // Clear and rebuild to ensure elements exist
-  let html = el.innerHTML; 
-  MUSCLES.forEach(m => {
-    html += `
-      <div class="row">
+// --- 5. UI Setup (Fixed the Null Error) ---
+function initPanels() {
+  ["musclesL", "musclesR"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const side = id === "musclesL" ? "left" : "right";
+    
+    MUSCLES.forEach(m => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
         <div class="m-label">${m}</div>
-        <div class="barWrap"><div class="bar" data-muscle="${m}"></div></div>
-        <div class="pct" data-pct="${m}">0%</div>
-      </div>`;
+        <div class="barWrap"><div class="bar"></div></div>
+        <div class="pct">0%</div>`;
+      el.appendChild(row);
+      
+      // Store references so we don't query later
+      uiCache[side][m] = {
+        bar: row.querySelector(".bar"),
+        pct: row.querySelector(".pct")
+      };
+    });
   });
-  el.innerHTML = html;
 }
 
-// Run this IMMEDIATELY
-makeMusclePanel("musclesL");
-makeMusclePanel("musclesR");
-
-function updateUI(id, acts) {
-  const panel = document.getElementById(id);
-  if (!panel) return;
-  
+function updateUI(side, acts) {
+  const cache = uiCache[side];
   MUSCLES.forEach(m => {
-    const bar = panel.querySelector(`.bar[data-muscle="${m}"]`);
-    const pct = panel.querySelector(`.pct[data-pct="${m}"]`);
-    
-    // Safety check: if the elements aren't found yet, skip this frame
-    if (bar && pct) {
+    const refs = cache[m];
+    if (refs) {
       const v = THREE.MathUtils.clamp(acts[m], 0, 1);
-      bar.style.width = `${Math.round(v * 100)}%`;
-      pct.textContent = `${Math.round(v * 100)}%`;
+      refs.bar.style.width = `${Math.round(v * 100)}%`;
+      refs.pct.textContent = `${Math.round(v * 100)}%`;
     }
   });
 }
+
+initPanels();
 
 // --- 6. Loading ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
@@ -136,10 +141,9 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
     if (o.name === "Eye_L") eyeL = o;
     if (o.name === "Eye_R") eyeR = o;
   });
-  model.updateMatrixWorld(true);
 });
 
-// --- 7. Animation Loop ---
+// --- 7. Loop ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -163,20 +167,14 @@ function animate() {
     const actsL = getMuscleActs(false, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
     const actsR = getMuscleActs(true, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
 
-    updateUI("musclesL", actsL);
-    updateUI("musclesR", actsR);
+    updateUI("left", actsL);
+    updateUI("right", actsR);
 
     // CN Lights
     const thr = 0.28;
-    const cn3Node = document.getElementById("cn3");
-    const cn4Node = document.getElementById("cn4");
-    const cn6Node = document.getElementById("cn6");
-
-    if (cn3Node && cn4Node && cn6Node) {
-        cn3Node.classList.toggle("on", (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr));
-        cn4Node.classList.toggle("on", (actsL.SO > thr || actsR.SO > thr));
-        cn6Node.classList.toggle("on", (actsL.LR > thr || actsR.LR > thr));
-    }
+    if (uiCache.cn3) uiCache.cn3.classList.toggle("on", (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr));
+    if (uiCache.cn4) uiCache.cn4.classList.toggle("on", (actsL.SO > thr || actsR.SO > thr));
+    if (uiCache.cn6) uiCache.cn6.classList.toggle("on", (actsL.LR > thr || actsR.LR > thr));
   }
   renderer.render(scene, camera);
 }
