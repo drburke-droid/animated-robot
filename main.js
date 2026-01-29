@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6 };
+const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6.5 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
 // --- 1. UI Initialization ---
@@ -84,18 +84,19 @@ const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// --- 3. Events (Fixed Zoom & Resize) ---
+// --- 3. Events ---
 window.addEventListener("pointermove", (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   APP_STATE.hasPointer = true;
 });
 
-// Improved Wheel Zoom Logic
+// Refined Zoom Event
 window.addEventListener("wheel", (e) => {
-  e.preventDefault(); // Prevents page scrolling
-  APP_STATE.zoom += e.deltaY * 0.005;
-  APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom, 2.5, 12);
+  e.preventDefault();
+  // Adjusting step size for better feel
+  const zoomStep = e.deltaY * 0.008;
+  APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom + zoomStep, 3, 14);
   camera.position.z = APP_STATE.zoom;
 }, { passive: false });
 
@@ -115,10 +116,9 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
 
-  // POSITION FIX: 
-  // Lowering the head significantly so the eyes are centered.
-  // Current offset -1.1 pushes the chin toward the bottom and eyes toward midline.
-  model.position.y = -1.1; 
+  // --- LOWER POSITION FIX ---
+  // Adjusted from -1.1 to -1.4 to drop the head further down
+  model.position.y = -1.4; 
 
   model.traverse(o => {
     if (o.isMesh) {
