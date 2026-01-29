@@ -5,17 +5,15 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Fixed Mapping) ---
+// --- 1. UI Initialization (Proper Side Mapping) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
-  // Mirroring logic:
-  // musclesR (Person's Right Eye) -> physically on the LEFT of screen
-  // musclesL (Person's Left Eye) -> physically on the RIGHT of screen
+  // Mapping to index.html physical positions
   const sides = [
-    { id: "musclesR", key: "right", label: "Right Eye (OD)" },
-    { id: "musclesL", key: "left", label: "Left Eye (OS)" }
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" },
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" }
   ];
 
   sides.forEach(s => {
@@ -38,13 +36,12 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Logic ---
+// --- 2. Anatomical Recruitment Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 0.80; 
 
-  // Normalize abduction: Positive = looking away from nose
-  // If isRight=true, positive yaw is Abduction. If isRight=false, negative yaw is Abduction.
+  // Abduction logic (looking away from nose)
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
 
@@ -53,7 +50,7 @@ function getRecruitment(isRight, yaw, pitch) {
   const outVal = Math.max(0, abduction);
   const inVal = Math.max(0, adduction);
 
-  // Mechanical Advantage: Recti optimal at ~23deg out, Obliques at ~51deg in
+  // Mechanical Leverage (H-Test Accuracy)
   const rectiEff = 0.4 + (outVal * 0.6); 
   const oblEff = 0.4 + (inVal * 0.6);
 
@@ -72,6 +69,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 5);
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -79,12 +77,13 @@ renderer.shadowMap.enabled = true;
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-// FIX: Moved plane back to -2.0. -0.5 was too close, causing "crazy eyes".
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.0); 
+
+// Plane moved back to -3.0 for natural focus
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -3.0); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 2));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 2.5));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2);
 keyLight.position.set(5, 5, 5);
 keyLight.castShadow = true;
@@ -97,6 +96,7 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
+// --- 4. Loading Engine ---
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById("app").appendChild(renderer.domElement);
   initUI();
@@ -111,7 +111,7 @@ window.addEventListener('DOMContentLoaded', () => {
     
     model.traverse(o => {
       if (o.isMesh) {
-        o.castShadow = o.receiveShadow = true;
+        o.castShadow = true; o.receiveShadow = true;
         if (o.name.toLowerCase().includes("cornea")) {
           o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0, opacity: 0.15, transparent: true });
           o.renderOrder = 10;
@@ -120,6 +120,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (o.name === "Eye_L") eyeL = o;
       if (o.name === "Eye_R") eyeR = o;
     });
+
     scene.add(model);
     document.getElementById("loading").style.display = "none";
     APP_STATE.ready = true;
@@ -127,7 +128,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// --- 4. Loop ---
+// --- 5. Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -139,32 +140,26 @@ function animate() {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
   }
 
-  // Define eyes explicitly to map OD (Right Eye) data to the OD Box
-  const eyeConfigs = [
-    { mesh: eyeL, isRight: false, side: "left" }, // OS
-    { mesh: eyeR, isRight: true, side: "right" }  // OD
-  ];
-
-  eyeConfigs.forEach(item => {
+  // Loop through eyes to set rotation and update UI
+  [ {mesh: eyeL, isRight: false, side: "left"}, {mesh: eyeR, isRight: true, side: "right"} ].forEach(item => {
     if (!item.mesh) return;
     const eyeWorldPos = new THREE.Vector3();
     item.mesh.getWorldPosition(eyeWorldPos);
     
-    // Calculate direction from this specific eye to the mouse
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-    // atan2 sensitivity boost. Clamp rotation to prevent "rolling back" into head
-    let yaw = Math.atan2(direction.x, direction.z);
-    let pitch = Math.asin(direction.y);
+    // Yaw (Horizontal) and Pitch (Vertical)
+    const yaw = Math.atan2(direction.x, direction.z);
+    const pitch = Math.asin(direction.y);
 
-    // Hard anatomical limit (approx 35 degrees)
-    yaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
-    pitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
+    // Anatomical Limit Clamping
+    const clampedYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
+    const clampedPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
 
-    item.mesh.rotation.set(-pitch, yaw, 0, 'YXZ');
+    item.mesh.rotation.set(-clampedPitch, clampedYaw, 0, 'YXZ');
     
-    // Use the yaw/pitch relative to the face, not the screen
-    const acts = getRecruitment(item.isRight, yaw, pitch);
+    // Calculate Recruitment based on individual eye yaw/pitch
+    const acts = getRecruitment(item.isRight, clampedYaw, clampedPitch);
     
     MUSCLES.forEach(m => {
       const v = THREE.MathUtils.clamp(acts[m], 0, 1);
@@ -177,7 +172,7 @@ function animate() {
     else APP_STATE.currentActsL = acts;
   });
 
-  // Nerve Activation Status
+  // Cranial Nerve Logic
   const t = 0.28;
   const aL = APP_STATE.currentActsL; 
   const aR = APP_STATE.currentActsR;
