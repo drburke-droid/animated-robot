@@ -9,9 +9,6 @@ function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
-  // Physical Layout:
-  // musclesL (ID) -> Physically on the LEFT of screen -> Label: Right Eye (OD)
-  // musclesR (ID) -> Physically on the RIGHT of screen -> Label: Left Eye (OS)
   const sides = [
     { id: "musclesL", key: "left", label: "Right Eye (OD)" },
     { id: "musclesR", key: "right", label: "Left Eye (OS)" }
@@ -148,12 +145,12 @@ function animate() {
     penlight.position.copy(targetVec);
   }
 
-  // --- CRITICAL PERSPECTIVE MAPPING ---
-  // eyeL is the person's actual left eye.
-  // uiCache.right corresponds to the HUD on the right side of the screen.
+  // --- DATA INVERSION APPLIED HERE ---
+  // eyeL (Subject Left) now maps to 'left' cache (Observer Left Box)
+  // eyeR (Subject Right) now maps to 'right' cache (Observer Right Box)
   const configs = [
-    { mesh: eyeL, isRight: false, side: "right" }, 
-    { mesh: eyeR, isRight: true, side: "left" }
+    { mesh: eyeL, isRight: false, side: "left" }, 
+    { mesh: eyeR, isRight: true, side: "right" }
   ];
 
   configs.forEach(item => {
