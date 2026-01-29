@@ -2,176 +2,153 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const uiCache = { left: {}, right: {}, cn3: null, cn4: null, cn6: null };
+const uiRef = { left: {}, right: {}, pills: {} };
 
-// --- 1. UI Initialization ---
-function initUI() {
-  const ids = ["musclesL", "musclesR"];
-  let readyCount = 0;
-
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    
-    const side = id === "musclesL" ? "left" : "right";
-    
+/** * 1. UI SETUP: Build the bars once and store references in memory.
+ */
+const initUI = () => {
+  ["L", "R"].forEach(side => {
+    const container = document.getElementById(`muscles${side}`);
+    const key = side === "L" ? "left" : "right";
     MUSCLES.forEach(m => {
       const row = document.createElement("div");
       row.className = "row";
-      row.innerHTML = `
-        <div class="m-label">${m}</div>
-        <div class="barWrap"><div class="bar"></div></div>
-        <div class="pct">0%</div>`;
-      el.appendChild(row);
-      
-      uiCache[side][m] = {
-        bar: row.querySelector(".bar"),
-        pct: row.querySelector(".pct")
-      };
+      row.innerHTML = `<div class="label">${m}</div><div class="barWrap"><div class="bar"></div></div><div class="pct">20%</div>`;
+      container.appendChild(row);
+      uiRef[key][m] = { bar: row.querySelector(".bar"), pct: row.querySelector(".pct") };
     });
-    readyCount++;
   });
+  uiRef.pills = { cn3: document.getElementById("cn3"), cn4: document.getElementById("cn4"), cn6: document.getElementById("cn6") };
+};
 
-  uiCache.cn3 = document.getElementById("cn3");
-  uiCache.cn4 = document.getElementById("cn4");
-  uiCache.cn6 = document.getElementById("cn6");
+/**
+ * 2. ANATOMICAL LOGIC: 
+ * Based on the H-test, calculating mechanical advantage.
+ */
+function calculateEngagement(isRight, yaw, pitch) {
+  const basal = 0.20; // 20% resting tone
+  const targetYaw = yaw * (isRight ? 1 : -1); // Positive = Abduction
+  
+  // Horizontal Recruitment
+  let lr = basal + Math.max(0, targetYaw);
+  let mr = basal + Math.max(0, -targetYaw);
 
-  return readyCount === 2;
-}
-
-// --- 2. Anatomical Logic ---
-function getMuscleActs(isRight, yN, pN) {
-  const tone = 0.20; 
-  const range = 0.80; 
-  const abduct = isRight ? Math.max(0, yN) : Math.max(0, -yN); 
-  const adduct = isRight ? Math.max(0, -yN) : Math.max(0, yN); 
-  const up = Math.max(0, pN);
-  const down = Math.max(0, -pN);
-
-  const effRecti = 0.4 + (abduct * 0.6); 
-  const effObliques = 0.4 + (adduct * 0.6);
-  const inhibit = (val) => Math.max(-0.1, -val * 0.5);
+  // Vertical Efficiency Factors
+  // Recti are primary movers when eye is Abducted (looking out)
+  const rectiEff = 0.5 + (Math.max(0, targetYaw) * 0.5);
+  // Obliques are primary movers when eye is Adducted (looking in)
+  const oblEff = 0.5 + (Math.max(0, -targetYaw) * 0.5);
 
   return {
-    LR: tone + (abduct * range) + inhibit(adduct),
-    MR: tone + (adduct * range) + inhibit(abduct),
-    SR: tone + (up * effRecti * range) + inhibit(down),
-    IR: tone + (down * effRecti * range) + inhibit(up),
-    SO: tone + (down * effObliques * range) + inhibit(up),
-    IO: tone + (up * effObliques * range) + inhibit(down)
+    LR: lr,
+    MR: mr,
+    SR: basal + (Math.max(0, pitch) * rectiEff),
+    IR: basal + (Math.max(0, -pitch) * rectiEff),
+    IO: basal + (Math.max(0, pitch) * oblEff),
+    SO: basal + (Math.max(0, -pitch) * oblEff)
   };
 }
 
-// --- 3. Scene Setup ---
+/**
+ * 3. THREE.JS SCENE SETUP
+ */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.01, 100);
-camera.position.set(0, 0, 5); 
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("app").appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.5));
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
-keyLight.position.set(5, 5, 5);
-keyLight.castShadow = true;
-keyLight.shadow.bias = -0.0005;
-keyLight.shadow.normalBias = 0.05;
-scene.add(keyLight);
+// Lighting - High quality, low acne
+scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 2));
+const key = new THREE.DirectionalLight(0xffffff, 2);
+key.position.set(5, 5, 5);
+key.castShadow = true;
+key.shadow.bias = -0.001; 
+key.shadow.mapSize.set(1024, 1024);
+scene.add(key);
 
-// --- 4. Interaction ---
-const mouseNDC = new THREE.Vector2(0, 0);
-let hasPointer = false;
+const mouse = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5);
+const targetVec = new THREE.Vector3();
+let model, eyeL, eyeR;
+
 window.addEventListener("pointermove", (e) => {
-  mouseNDC.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouseNDC.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  hasPointer = true;
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 });
 
-const raycaster = new THREE.Raycaster();
-const target = new THREE.Vector3(0, 0, 2);
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5); 
-
-let model, eyeL, eyeR;
-const MAX_YAW = 0.5, MAX_PITCH = 0.4;
-let yawSm = 0, pitchSm = 0;
-
-// --- 5. Main Execution ---
-if (initUI()) {
-  new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
-    model = gltf.scene;
-    scene.add(model);
-
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const scale = 1.8 / size.y;
-    model.scale.setScalar(scale);
-    model.position.set(-center.x * scale, (-center.y * scale) - 0.25, -center.z * scale);
-
-    model.traverse(o => {
-      if (o.isMesh) {
-        o.castShadow = true; o.receiveShadow = true;
-        if (o.name.toLowerCase().includes("cornea")) {
-          o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, ior: 1.33, transparent: true, opacity: 0.1, depthWrite: false });
-          o.renderOrder = 10;
-        }
+/**
+ * 4. LOAD & NORMALIZE
+ */
+initUI();
+new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
+  model = gltf.scene;
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  
+  const scale = 2.0 / size.y;
+  model.scale.setScalar(scale);
+  model.position.set(-center.x * scale, -center.y * scale - 0.2, -center.z * scale);
+  
+  model.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = o.receiveShadow = true;
+      if (o.name.toLowerCase().includes("cornea")) {
+        o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0, opacity: 0.1, transparent: true });
+        o.renderOrder = 10;
       }
-      if (o.name === "Eye_L") eyeL = o;
-      if (o.name === "Eye_R") eyeR = o;
-    });
-    
-    animate(); // Only start loop after model is ready
+    }
+    if (o.name === "Eye_L") eyeL = o;
+    if (o.name === "Eye_R") eyeR = o;
   });
-}
+  
+  scene.add(model);
+  animate();
+});
 
+/**
+ * 5. ANIMATION LOOP (Optimized)
+ */
 function animate() {
   requestAnimationFrame(animate);
+  
+  raycaster.setFromCamera(mouse, camera);
+  raycaster.ray.intersectPlane(gazePlane, targetVec);
 
-  if (hasPointer) {
-    raycaster.setFromCamera(mouseNDC, camera);
-    raycaster.ray.intersectPlane(gazePlane, target);
-  } else {
-    target.lerp(new THREE.Vector3(0, 0, 2), 0.05);
-  }
-
-  const yawVal = Math.atan2(target.x, target.z);
-  const pitchVal = Math.atan2(-target.y, target.z);
-  yawSm = THREE.MathUtils.lerp(yawSm, THREE.MathUtils.clamp(yawVal, -MAX_YAW, MAX_YAW), 0.1);
-  pitchSm = THREE.MathUtils.lerp(pitchSm, THREE.MathUtils.clamp(pitchVal, -MAX_PITCH, MAX_PITCH), 0.1);
+  const yaw = THREE.MathUtils.clamp(Math.atan2(targetVec.x, 3), -0.5, 0.5);
+  const pitch = THREE.MathUtils.clamp(Math.atan2(-targetVec.y, 3), -0.3, 0.3);
 
   if (eyeL && eyeR) {
-    eyeL.rotation.set(pitchSm, yawSm, 0, 'YXZ');
-    eyeR.rotation.set(pitchSm, yawSm, 0, 'YXZ');
+    eyeL.rotation.set(pitch, yaw, 0, 'YXZ');
+    eyeR.rotation.set(pitch, yaw, 0, 'YXZ');
   }
 
-  // Update UI using Cached References (No getElementById in loop!)
-  const actsL = getMuscleActs(false, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
-  const actsR = getMuscleActs(true, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
+  // Update UI Elements directly from cache
+  const actsL = calculateEngagement(false, yaw, pitch);
+  const actsR = calculateEngagement(true, yaw, pitch);
 
-  ["left", "right"].forEach(side => {
-    const acts = side === "left" ? actsL : actsR;
+  [ {a: actsL, s: "left"}, {a: actsR, s: "right"} ].forEach(group => {
     MUSCLES.forEach(m => {
-      const v = THREE.MathUtils.clamp(acts[m], 0, 1);
-      uiCache[side][m].bar.style.width = (v * 100) + "%";
-      uiCache[side][m].pct.textContent = Math.round(v * 100) + "%";
+      const val = THREE.MathUtils.clamp(group.a[m], 0, 1);
+      const ui = uiRef[group.s][m];
+      ui.bar.style.width = (val * 100) + "%";
+      ui.pct.innerText = Math.round(val * 100) + "%";
     });
   });
 
-  const thr = 0.28;
-  if (uiCache.cn3) uiCache.cn3.classList.toggle("on", (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr));
-  if (uiCache.cn4) uiCache.cn4.classList.toggle("on", (actsL.SO > thr || actsR.SO > thr));
-  if (uiCache.cn6) uiCache.cn6.classList.toggle("on", (actsL.LR > thr || actsR.LR > thr));
+  // Nerve Logic
+  const t = 0.25;
+  uiRef.pills.cn3.classList.toggle("on", actsL.MR > t || actsL.SR > t || actsL.IR > t || actsL.IO > t || actsR.MR > t || actsR.SR > t || actsR.IR > t || actsR.IO > t);
+  uiRef.pills.cn4.classList.toggle("on", actsL.SO > t || actsR.SO > t);
+  uiRef.pills.cn6.classList.toggle("on", actsL.LR > t || actsR.LR > t);
 
   renderer.render(scene, camera);
 }
-
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
