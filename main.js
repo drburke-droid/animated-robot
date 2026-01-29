@@ -36,7 +36,7 @@ function initUI() {
 
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
-  const range = 1.6; // High responsiveness
+  const range = 1.6; 
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
   const up = Math.max(0, pitch);
@@ -58,19 +58,28 @@ function getRecruitment(isRight, yaw, pitch) {
 }
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050505);
+scene.background = new THREE.Color(0x020202);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Smoother shadows
 document.getElementById("app").appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.4));
-const penlight = new THREE.PointLight(0xffffff, 60, 10);
+// Global Fill
+scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.3));
+
+// PENLIGHT (The source of the reflex)
+const penlight = new THREE.PointLight(0xffffff, 80, 12);
 penlight.castShadow = true;
+// SHADOW ACNE FIX: Normal bias helps push shadows off the mesh surface
+penlight.shadow.bias = -0.0005; 
+penlight.shadow.normalBias = 0.02; 
+penlight.shadow.mapSize.width = 1024;
+penlight.shadow.mapSize.height = 1024;
 scene.add(penlight);
 
 const mouse = new THREE.Vector2();
@@ -98,13 +107,25 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true;
+      o.receiveShadow = true;
+      
+      // HIGH CONTRAST EYE MATERIALS
       if (o.name.toLowerCase().includes("cornea")) {
-        o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0.05, ior: 1.4, thickness: 0.1, transparent: true, opacity: 1 });
+        o.material = new THREE.MeshPhysicalMaterial({ 
+          transmission: 1.0, 
+          roughness: 0, 
+          ior: 1.45, 
+          thickness: 0.1, 
+          specularIntensity: 2.0, // Force the "glint"
+          transparent: true, 
+          opacity: 1 
+        });
         o.renderOrder = 10;
       }
       if (o.name.toLowerCase().includes("iris")) {
         o.material.roughness = 1;
         o.material.metalness = 0;
+        o.material.emissive = new THREE.Color(0x111111); // Helps iris pop
       }
     }
     if (o.name === "Eye_L") eyeL = o;
@@ -115,7 +136,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
   animate();
-}, undefined, (err) => console.error("Verify head_eyes_v1.glb filename/path", err));
+}, undefined, (err) => console.error(err));
 
 function animate() {
   if (!APP_STATE.ready) return;
@@ -124,13 +145,13 @@ function animate() {
   if (APP_STATE.hasPointer) {
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(gazePlane, targetVec);
-    penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.5);
+    // Position light slightly in front of the gaze target for reflection
+    penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
   } else {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
     penlight.position.copy(targetVec);
   }
 
-  // Eye Data Mapping: Left box = Right Eye data
   const configs = [
     { mesh: eyeL, isRight: false, side: "right" }, 
     { mesh: eyeR, isRight: true, side: "left" }
@@ -153,8 +174,10 @@ function animate() {
       const visualVal = THREE.MathUtils.clamp(acts[m] / 0.7, 0, 1);
       const displayVal = THREE.MathUtils.clamp(Math.round((acts[m] / 0.7) * 100), 0, 100);
       const cache = uiCache[item.side][m];
-      cache.bar.style.width = (visualVal * 100) + "%";
-      cache.pct.innerText = displayVal + "%";
+      if(cache) {
+        cache.bar.style.width = (visualVal * 100) + "%";
+        cache.pct.innerText = displayVal + "%";
+      }
     });
 
     if (item.isRight) APP_STATE.currentActsR = acts;
@@ -164,9 +187,9 @@ function animate() {
   const t = 0.28;
   const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
   if (aL && aR) {
-    uiCache.cn.cn3.classList.toggle("on", aL.MR > t || aL.SR > t || aL.IR > t || aL.IO > t || aR.MR > t || aR.SR > t || aR.IR > t || aR.IO > t);
-    uiCache.cn.cn4.classList.toggle("on", aL.SO > t || aR.SO > t);
-    uiCache.cn.cn6.classList.toggle("on", aL.LR > t || aR.LR > t);
+    if(uiCache.cn.cn3) uiCache.cn.cn3.classList.toggle("on", aL.MR > t || aL.SR > t || aL.IR > t || aL.IO > t || aR.MR > t || aR.SR > t || aR.IR > t || aR.IO > t);
+    if(uiCache.cn.cn4) uiCache.cn.cn4.classList.toggle("on", aL.SO > t || aR.SO > t);
+    if(uiCache.cn.cn6) uiCache.cn.cn6.classList.toggle("on", aL.LR > t || aR.LR > t);
   }
   renderer.render(scene, camera);
 }
