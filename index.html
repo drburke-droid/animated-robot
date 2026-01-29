@@ -17,7 +17,7 @@
 
     #app { position: fixed; inset: 0; }
 
-    /* Loading Screen - Prevents the loop from running before assets are ready */
+    /* Loading Screen */
     #loading {
       position: fixed;
       inset: 0;
@@ -37,7 +37,7 @@
       inset: 0;
       pointer-events: none;
       z-index: 10;
-      opacity: 0; /* JS will reveal this when ready */
+      opacity: 0; 
       transition: opacity 1s ease;
     }
 
@@ -45,7 +45,7 @@
       position: absolute;
       inset: 0;
       display: flex;
-      justify-content: space-between;
+      justify-content: space-between; /* Pushes L to left, R to right */
       align-items: center;
       padding: 0 40px;
     }
@@ -59,7 +59,7 @@
 
     /* Panel Styling */
     .panel {
-      background: rgba(15, 15, 15, 0.9);
+      background: rgba(15, 15, 15, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 12px;
       padding: 18px;
@@ -160,17 +160,17 @@
           <div class="pill" id="cn4">CN IV</div>
           <div class="pill" id="cn6">CN VI</div>
         </div>
-        <div id="note">Enhanced Convergence Logic - Near Triad Mode</div>
+        <div id="note">Proprioceptive Feedback: Standard Clinical Orientation</div>
       </div>
     </div>
 
     <div id="side-hud">
-      <div class="panel" id="musclesR">
-        <div class="panel-title">Right Eye (OD)</div>
-      </div>
-
       <div class="panel" id="musclesL">
         <div class="panel-title">Left Eye (OS)</div>
+      </div>
+
+      <div class="panel" id="musclesR">
+        <div class="panel-title">Right Eye (OD)</div>
       </div>
     </div>
   </div>
