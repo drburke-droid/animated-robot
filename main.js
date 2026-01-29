@@ -9,6 +9,9 @@ function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
+  // Physical Layout:
+  // musclesL (ID) -> Physically on the LEFT of screen -> Label: Right Eye (OD)
+  // musclesR (ID) -> Physically on the RIGHT of screen -> Label: Left Eye (OS)
   const sides = [
     { id: "musclesL", key: "left", label: "Right Eye (OD)" },
     { id: "musclesR", key: "right", label: "Left Eye (OS)" }
@@ -66,20 +69,15 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Smoother shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("app").appendChild(renderer.domElement);
 
-// Global Fill
 scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.3));
 
-// PENLIGHT (The source of the reflex)
 const penlight = new THREE.PointLight(0xffffff, 80, 12);
 penlight.castShadow = true;
-// SHADOW ACNE FIX: Normal bias helps push shadows off the mesh surface
 penlight.shadow.bias = -0.0005; 
 penlight.shadow.normalBias = 0.02; 
-penlight.shadow.mapSize.width = 1024;
-penlight.shadow.mapSize.height = 1024;
 scene.add(penlight);
 
 const mouse = new THREE.Vector2();
@@ -109,14 +107,13 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
       o.castShadow = true;
       o.receiveShadow = true;
       
-      // HIGH CONTRAST EYE MATERIALS
       if (o.name.toLowerCase().includes("cornea")) {
         o.material = new THREE.MeshPhysicalMaterial({ 
           transmission: 1.0, 
           roughness: 0, 
           ior: 1.45, 
           thickness: 0.1, 
-          specularIntensity: 2.0, // Force the "glint"
+          specularIntensity: 2.0, 
           transparent: true, 
           opacity: 1 
         });
@@ -125,7 +122,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
       if (o.name.toLowerCase().includes("iris")) {
         o.material.roughness = 1;
         o.material.metalness = 0;
-        o.material.emissive = new THREE.Color(0x111111); // Helps iris pop
+        o.material.emissive = new THREE.Color(0x111111);
       }
     }
     if (o.name === "Eye_L") eyeL = o;
@@ -136,7 +133,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
   animate();
-}, undefined, (err) => console.error(err));
+});
 
 function animate() {
   if (!APP_STATE.ready) return;
@@ -145,13 +142,15 @@ function animate() {
   if (APP_STATE.hasPointer) {
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(gazePlane, targetVec);
-    // Position light slightly in front of the gaze target for reflection
     penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
   } else {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
     penlight.position.copy(targetVec);
   }
 
+  // --- CRITICAL PERSPECTIVE MAPPING ---
+  // eyeL is the person's actual left eye.
+  // uiCache.right corresponds to the HUD on the right side of the screen.
   const configs = [
     { mesh: eyeL, isRight: false, side: "right" }, 
     { mesh: eyeR, isRight: true, side: "left" }
@@ -173,6 +172,7 @@ function animate() {
     MUSCLES.forEach(m => {
       const visualVal = THREE.MathUtils.clamp(acts[m] / 0.7, 0, 1);
       const displayVal = THREE.MathUtils.clamp(Math.round((acts[m] / 0.7) * 100), 0, 100);
+      
       const cache = uiCache[item.side][m];
       if(cache) {
         cache.bar.style.width = (visualVal * 100) + "%";
