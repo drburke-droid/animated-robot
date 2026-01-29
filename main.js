@@ -5,16 +5,17 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization ---
+// --- 1. UI Initialization (Fixed Mapping) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
-  // Mirroring: musclesL ID is on the right of the screen in index.html, 
-  // musclesR ID is on the left. We align the internal logic to match.
+  // We map IDs based on SCREEN position
+  // musclesR is on the Left side of the screen (Person's Right)
+  // musclesL is on the Right side of the screen (Person's Left)
   const sides = [
-    { id: "musclesL", key: "left", label: "Left Eye (OS)" },
-    { id: "musclesR", key: "right", label: "Right Eye (OD)" }
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" },
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" }
   ];
 
   sides.forEach(s => {
@@ -37,14 +38,16 @@ function initUI() {
   return true;
 }
 
-// --- 2. The Clinical Math Fix ---
+// --- 2. Corrected Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 0.80; 
 
-  // Normalize Abduction vs Adduction for each eye
-  // Right Eye: Negative Yaw is Adduction (looking left/nose)
-  // Left Eye: Positive Yaw is Adduction (looking right/nose)
+  // Yaw logic: 
+  // For the Person's Right Eye (OD): Yaw > 0 is looking toward the right ear (Abduction)
+  // For the Person's Left Eye (OS): Yaw > 0 is looking toward the nose (Adduction)
+  
+  // Normalize abduction: Positive = looking away from nose
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
 
@@ -53,19 +56,16 @@ function getRecruitment(isRight, yaw, pitch) {
   const outVal = Math.max(0, abduction);
   const inVal = Math.max(0, adduction);
 
-  // Mechanical Advantage:
-  // Recti (SR/IR) are primary when eye is OUT (Abducted)
   const rectiEff = 0.3 + (outVal * 0.7); 
-  // Obliques (SO/IO) are primary when eye is IN (Adducted)
   const oblEff = 0.3 + (inVal * 0.7);
 
   return {
     LR: tone + (outVal * range),
     MR: tone + (inVal * range),
-    SR: tone + (up * rectiEff * range),   // Elevates best when abducted
-    IR: tone + (down * rectiEff * range), // Depresses best when abducted
-    IO: tone + (up * oblEff * range),     // Elevates best when adducted
-    SO: tone + (down * oblEff * range)    // Depresses best when adducted
+    SR: tone + (up * rectiEff * range),   
+    IR: tone + (down * rectiEff * range), 
+    IO: tone + (up * oblEff * range),     
+    SO: tone + (down * oblEff * range)    
   };
 }
 
@@ -80,11 +80,10 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.5); // Plane very close for high convergence
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.5); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// Lighting
 scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 2));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2);
 keyLight.position.set(5, 5, 5);
@@ -98,7 +97,6 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// --- 4. Assets ---
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById("app").appendChild(renderer.domElement);
   initUI();
@@ -114,7 +112,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (o.isMesh) {
         o.castShadow = o.receiveShadow = true;
         if (o.name.toLowerCase().includes("cornea")) {
-          o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0, opacity: 0.1, transparent: true });
+          o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0, opacity: 0.15, transparent: true });
           o.renderOrder = 10;
         }
       }
@@ -128,7 +126,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// --- 5. Animation Loop ---
+// --- 4. Fixed Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -140,31 +138,40 @@ function animate() {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
   }
 
-  [ {eye: eyeL, isRight: false, side: "left"}, {eye: eyeR, isRight: true, side: "right"} ].forEach(item => {
-    if (!item.eye) return;
+  // Define eyes explicitly to avoid screen-position confusion
+  const eyeConfigs = [
+    { mesh: eyeL, isRight: false, side: "left" },
+    { mesh: eyeR, isRight: true, side: "right" }
+  ];
+
+  eyeConfigs.forEach(item => {
+    if (!item.mesh) return;
     const eyeWorldPos = new THREE.Vector3();
-    item.eye.getWorldPosition(eyeWorldPos);
+    item.mesh.getWorldPosition(eyeWorldPos);
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-    // atan2 sensitivity boost
-    const yaw = Math.atan2(direction.x, direction.z) * 1.5; 
-    const pitch = Math.asin(direction.y) * 1.5;
+    const yaw = Math.atan2(direction.x, direction.z);
+    const pitch = Math.asin(direction.y);
 
-    item.eye.rotation.set(-pitch, yaw, 0, 'YXZ');
+    item.mesh.rotation.set(-pitch, yaw, 0, 'YXZ');
     const acts = getRecruitment(item.isRight, yaw, pitch);
     
+    // Send data to the cached UI elements
     MUSCLES.forEach(m => {
       const v = THREE.MathUtils.clamp(acts[m], 0, 1);
       const cache = uiCache[item.side][m];
       cache.bar.style.width = (v * 100) + "%";
       cache.pct.innerText = Math.round(v * 100) + "%";
     });
+
     if (item.isRight) APP_STATE.currentActsR = acts;
     else APP_STATE.currentActsL = acts;
   });
 
+  // Nerve Activation (Now uses the specific eye-assigned objects)
   const t = 0.28;
-  const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
+  const aL = APP_STATE.currentActsL; 
+  const aR = APP_STATE.currentActsR;
   if (aL && aR) {
     uiCache.cn.cn3.classList.toggle("on", aL.MR > t || aL.SR > t || aL.IR > t || aL.IO > t || aR.MR > t || aR.SR > t || aR.IR > t || aR.IO > t);
     uiCache.cn.cn4.classList.toggle("on", aL.SO > t || aR.SO > t);
