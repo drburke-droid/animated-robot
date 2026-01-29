@@ -5,7 +5,6 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6.5 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
@@ -35,18 +34,24 @@ function initUI() {
   return true;
 }
 
+// --- CLINICAL VECTOR DECOMPOSITION ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 1.6; 
+
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
+
   const up = Math.max(0, pitch);
   const down = Math.max(0, -pitch);
   const outVal = Math.max(0, abduction);
   const inVal = Math.max(0, adduction);
 
-  const rectiEff = 0.4 + (outVal * 0.6); 
-  const oblEff = 0.4 + (inVal * 0.6);
+  // Mechanical Leverage Scaling (The "Sherrington/Donders" tweak)
+  // Recti (SR/IR) gain power in abduction (out)
+  const rectiEff = 0.2 + (outVal * 0.8); 
+  // Obliques (SO/IO) gain power in adduction (in)
+  const oblEff = 0.2 + (inVal * 0.8);
 
   return {
     LR: tone + (outVal * range),
@@ -58,7 +63,6 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
-// --- 2. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020202);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -84,17 +88,14 @@ const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// --- 3. Events ---
 window.addEventListener("pointermove", (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   APP_STATE.hasPointer = true;
 });
 
-// Refined Zoom Event
 window.addEventListener("wheel", (e) => {
   e.preventDefault();
-  // Adjusting step size for better feel
   const zoomStep = e.deltaY * 0.008;
   APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom + zoomStep, 3, 14);
   camera.position.z = APP_STATE.zoom;
@@ -108,7 +109,6 @@ window.addEventListener("resize", () => {
 
 initUI();
 
-// --- 4. Model Loading ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
@@ -116,9 +116,8 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
 
-  // --- LOWER POSITION FIX ---
-  // Adjusted from -1.1 to -1.4 to drop the head further down
-  model.position.y = -1.4; 
+  // LOWERED HEAD POSITION
+  model.position.y = -1.6; 
 
   model.traverse(o => {
     if (o.isMesh) {
@@ -146,7 +145,6 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   animate();
 });
 
-// --- 5. Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
