@@ -11,8 +11,8 @@ function initUI() {
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Right Eye (OD)" },
-    { id: "musclesR", key: "right", label: "Left Eye (OS)" }
+    { id: "musclesL", key: "left", label: "Right Eye (OD)" }, 
+    { id: "musclesR", key: "right", label: "Left Eye (OS)" }  
   ];
 
   sides.forEach(s => {
@@ -35,14 +35,12 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Recruitment Logic ---
+// --- 2. Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
-  const range = 1.6; // High sensitivity range
-
+  const range = 1.6; 
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
-
   const up = Math.max(0, pitch);
   const down = Math.max(0, -pitch);
   const outVal = Math.max(0, abduction);
@@ -73,18 +71,18 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 document.getElementById("app").appendChild(renderer.domElement);
 
-// Ambient Fill
-scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 0.8));
+// Global Fill Light (Dim to keep contrast high)
+scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.5));
 
-// CLINICAL LIGHTING: PointLight attached to target for corneal reflex
-const cursorLight = new THREE.PointLight(0xffffff, 15, 10);
-cursorLight.castShadow = true;
-cursorLight.shadow.bias = -0.002;
-scene.add(cursorLight);
+// PENLIGHT: PointLight attached to cursor target
+const penlight = new THREE.PointLight(0xffffff, 50, 10); // High intensity for reflex
+penlight.castShadow = true;
+penlight.shadow.bias = -0.0001;
+scene.add(penlight);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5); 
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -3.0); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
@@ -94,7 +92,7 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// --- 4. Loading ---
+// --- 4. Loading & Material Overrides ---
 initUI();
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
@@ -108,23 +106,30 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true; o.receiveShadow = true;
+      
+      // Override Cornea for Maximum Transparency/Reflex
       if (o.name.toLowerCase().includes("cornea")) {
-        // High specular material for the "Light Reflex"
         o.material = new THREE.MeshPhysicalMaterial({ 
-            transmission: 1, 
-            roughness: 0, 
-            metalness: 0,
-            ior: 1.33,
-            opacity: 0.2, 
-            transparent: true,
-            thickness: 0.1
+          color: 0xffffff,
+          transmission: 1.0, 
+          roughness: 0, 
+          ior: 1.5, 
+          thickness: 0.1,
+          transparent: true,
+          opacity: 1
         });
         o.renderOrder = 10;
+      }
+      // Ensure Iris is Matte
+      if (o.name.toLowerCase().includes("iris")) {
+        o.material.roughness = 1.0;
+        o.material.metalness = 0;
       }
     }
     if (o.name === "Eye_L") eyeL = o;
     if (o.name === "Eye_R") eyeR = o;
   });
+
   scene.add(model);
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
@@ -139,33 +144,37 @@ function animate() {
   if (APP_STATE.hasPointer) {
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(gazePlane, targetVec);
-    // Move the PointLight to follow the cursor target
-    cursorLight.position.copy(targetVec);
+    penlight.position.copy(targetVec); // Light follows mouse
   } else {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
-    cursorLight.position.copy(targetVec);
+    penlight.position.copy(targetVec);
   }
 
-  [ {mesh: eyeL, isRight: false, side: "left"}, {mesh: eyeR, isRight: true, side: "right"} ].forEach(item => {
+  const eyes = [
+    { mesh: eyeL, isRight: false, side: "right" }, // Screen Right = Person Left
+    { mesh: eyeR, isRight: true, side: "left" }    // Screen Left = Person Right
+  ];
+
+  eyes.forEach(item => {
     if (!item.mesh) return;
     const eyeWorldPos = new THREE.Vector3();
     item.mesh.getWorldPosition(eyeWorldPos);
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-    const yaw = Math.atan2(direction.x, direction.z) * 1.5; 
-    const pitch = Math.asin(direction.y) * 1.5;
+    const yaw = Math.atan2(direction.x, direction.z);
+    const pitch = Math.asin(direction.y);
 
     const clampedYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
     const clampedPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
 
     item.mesh.rotation.set(-clampedPitch, clampedYaw, 0, 'YXZ');
+    
     const acts = getRecruitment(item.isRight, clampedYaw, clampedPitch);
     
     MUSCLES.forEach(m => {
-      // DISPLAY FIX: Scale 0.7 to 100% UI, but cap text at 100%
-      const rawVal = acts[m];
-      const visualPct = THREE.MathUtils.clamp(rawVal / 0.7, 0, 1);
-      const displayPct = THREE.MathUtils.clamp(Math.round((rawVal / 0.7) * 100), 0, 100);
+      // Scale 0.7 to 100% UI, but cap text at 100%
+      const visualPct = THREE.MathUtils.clamp(acts[m] / 0.7, 0, 1);
+      const displayPct = THREE.MathUtils.clamp(Math.round((acts[m] / 0.7) * 100), 0, 100);
 
       const cache = uiCache[item.side][m];
       cache.bar.style.width = (visualPct * 100) + "%";
@@ -176,6 +185,7 @@ function animate() {
     else APP_STATE.currentActsL = acts;
   });
 
+  // Nerve Logic
   const t = 0.28;
   const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
   if (aL && aR) {
@@ -185,3 +195,9 @@ function animate() {
   }
   renderer.render(scene, camera);
 }
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
