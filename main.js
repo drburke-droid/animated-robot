@@ -5,14 +5,14 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Literal Title Swap) ---
+// --- 1. UI Initialization ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Right Eye (OD)" }, // Literal text change
-    { id: "musclesR", key: "right", label: "Left Eye (OS)" }  // Literal text change
+    { id: "musclesL", key: "left", label: "Right Eye (OD)" },
+    { id: "musclesR", key: "right", label: "Left Eye (OS)" }
   ];
 
   sides.forEach(s => {
@@ -35,10 +35,11 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Recruitment Logic ---
+// --- 2. Enhanced Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
-  const range = 0.80; 
+  // SENSITIVITY BOOST: Increased from 0.8 to 1.5 to make muscles reach max effect sooner
+  const range = 1.5; 
 
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
@@ -61,7 +62,7 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
-// --- 3. Three.js Setup ---
+// --- 3. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -90,7 +91,7 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// --- 4. Loading Engine ---
+// --- 4. Loading ---
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById("app").appendChild(renderer.domElement);
   initUI();
@@ -102,7 +103,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const scale = 1.8 / size.y;
     model.scale.setScalar(scale);
     model.position.set(-center.x * scale, -center.y * scale - 0.2, -center.z * scale);
-    
     model.traverse(o => {
       if (o.isMesh) {
         o.castShadow = true; o.receiveShadow = true;
@@ -114,10 +114,8 @@ window.addEventListener('DOMContentLoaded', () => {
       if (o.name === "Eye_L") eyeL = o;
       if (o.name === "Eye_R") eyeR = o;
     });
-
     scene.add(model);
-    const loadEl = document.getElementById("loading");
-    if (loadEl) loadEl.style.display = "none";
+    document.getElementById("loading").style.display = "none";
     APP_STATE.ready = true;
     animate();
   });
@@ -141,21 +139,28 @@ function animate() {
     item.mesh.getWorldPosition(eyeWorldPos);
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-    const yaw = Math.atan2(direction.x, direction.z);
-    const pitch = Math.asin(direction.y);
+    // atan2 sensitivity boost
+    const yaw = Math.atan2(direction.x, direction.z) * 1.8; 
+    const pitch = Math.asin(direction.y) * 1.8;
 
     const clampedYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
-    const clampedPitch = THREE.MathUtils.clamp(clampedYaw, -0.4, 0.4); // Logic stability fix
+    const clampedPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
 
-    item.mesh.rotation.set(-pitch, yaw, 0, 'YXZ');
+    item.mesh.rotation.set(-clampedPitch, clampedYaw, 0, 'YXZ');
     
-    const acts = getRecruitment(item.isRight, clampedYaw, pitch);
+    const acts = getRecruitment(item.isRight, clampedYaw, clampedPitch);
     
     MUSCLES.forEach(m => {
-      const v = THREE.MathUtils.clamp(acts[m], 0, 1);
+      // TRUNCATION LOGIC:
+      // We clamp raw data at 0.7 (70%).
+      // We then divide by 0.7 to map that "max" value to 100% of the UI bar's width.
+      const rawVal = THREE.MathUtils.clamp(acts[m], 0, 0.7);
+      const visualVal = rawVal / 0.7; 
+
       const cache = uiCache[item.side][m];
-      cache.bar.style.width = (v * 100) + "%";
-      cache.pct.innerText = Math.round(v * 100) + "%";
+      cache.bar.style.width = (visualVal * 100) + "%";
+      // We still show the actual percentage value (up to 70%) for clinical accuracy
+      cache.pct.innerText = Math.round(acts[m] * 100) + "%";
     });
 
     if (item.isRight) APP_STATE.currentActsR = acts;
