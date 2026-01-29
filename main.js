@@ -3,7 +3,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const APP = document.getElementById("app");
 
-// --- 1. Scene & Rendering ---
+// --- 1. Scene & Camera ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 
@@ -17,7 +17,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 APP.appendChild(renderer.domElement);
 
-// --- 2. Lighting (Anti-Striation Fix) ---
+// --- 2. Lighting ---
 scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.5));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
 keyLight.position.set(5, 5, 5);
@@ -46,62 +46,71 @@ const MAX_YAW = THREE.MathUtils.degToRad(30);
 const MAX_PITCH = THREE.MathUtils.degToRad(22);
 let yawSm = 0, pitchSm = 0;
 
+const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
+
 /**
- * Calculates recruitment based on the "H-Test" clinical mechanics.
- * @param {boolean} isRight - Is this the subject's right eye?
- * @param {number} yN - Normalized Yaw (-1 to 1)
- * @param {number} pN - Normalized Pitch (-1 to 1)
+ * High Accuracy Anatomy Recruitment
  */
 function getMuscleActs(isRight, yN, pN) {
-  const tone = 0.20; // Basal tone in primary gaze (20% active)
-  const range = 0.80; // Available dynamic range
+  const tone = 0.20; // 20% Basal Tone
+  const range = 0.80; 
 
-  // Horizontal Vectors
   const abduct = isRight ? Math.max(0, yN) : Math.max(0, -yN); 
   const adduct = isRight ? Math.max(0, -yN) : Math.max(0, yN); 
-  
-  // Vertical Vectors
   const up = Math.max(0, pN);
   const down = Math.max(0, -pN);
 
-  // Efficiency scaling: 
-  // Recti gain advantage in abduction (looking out)
-  // Obliques gain advantage in adduction (looking in)
   const effRecti = 0.4 + (abduct * 0.6); 
   const effObliques = 0.4 + (adduct * 0.6);
-
-  // Sherrington's Law: As one muscle fires, the antagonist slightly inhibits below tone
   const inhibit = (val) => Math.max(-0.1, -val * 0.5);
 
   return {
     LR: tone + (abduct * range) + inhibit(adduct),
     MR: tone + (adduct * range) + inhibit(abduct),
-    
-    // Superior Rectus: Primary elevator in abduction
     SR: tone + (up * effRecti * range) + inhibit(down),
-    // Inferior Rectus: Primary depressor in abduction
     IR: tone + (down * effRecti * range) + inhibit(up),
-    
-    // Superior Oblique: Primary depressor in ADduction
     SO: tone + (down * effObliques * range) + inhibit(up),
-    // Inferior Oblique: Primary elevator in ADduction
     IO: tone + (up * effObliques * range) + inhibit(down)
   };
 }
 
-// --- 5. UI Updates ---
-const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const updateUI = (id, acts) => {
+// --- 5. UI Helpers (Safety First) ---
+function makeMusclePanel(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  // Clear and rebuild to ensure elements exist
+  let html = el.innerHTML; 
+  MUSCLES.forEach(m => {
+    html += `
+      <div class="row">
+        <div class="m-label">${m}</div>
+        <div class="barWrap"><div class="bar" data-muscle="${m}"></div></div>
+        <div class="pct" data-pct="${m}">0%</div>
+      </div>`;
+  });
+  el.innerHTML = html;
+}
+
+// Run this IMMEDIATELY
+makeMusclePanel("musclesL");
+makeMusclePanel("musclesR");
+
+function updateUI(id, acts) {
   const panel = document.getElementById(id);
   if (!panel) return;
+  
   MUSCLES.forEach(m => {
     const bar = panel.querySelector(`.bar[data-muscle="${m}"]`);
     const pct = panel.querySelector(`.pct[data-pct="${m}"]`);
-    const v = THREE.MathUtils.clamp(acts[m], 0, 1);
-    bar.style.width = `${Math.round(v * 100)}%`;
-    pct.textContent = `${Math.round(v * 100)}%`;
+    
+    // Safety check: if the elements aren't found yet, skip this frame
+    if (bar && pct) {
+      const v = THREE.MathUtils.clamp(acts[m], 0, 1);
+      bar.style.width = `${Math.round(v * 100)}%`;
+      pct.textContent = `${Math.round(v * 100)}%`;
+    }
   });
-};
+}
 
 // --- 6. Loading ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
@@ -130,7 +139,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model.updateMatrixWorld(true);
 });
 
-// --- 7. Loop ---
+// --- 7. Animation Loop ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -151,22 +160,30 @@ function animate() {
     eyeL.rotation.set(pitchSm, yawSm, 0, 'YXZ');
     eyeR.rotation.set(pitchSm, yawSm, 0, 'YXZ');
 
-    // UI Calculations
     const actsL = getMuscleActs(false, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
     const actsR = getMuscleActs(true, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
 
     updateUI("musclesL", actsL);
     updateUI("musclesR", actsR);
 
-    // CN Lights Logic
+    // CN Lights
     const thr = 0.28;
-    const cn3 = (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr);
-    const cn4 = (actsL.SO > thr || actsR.SO > thr);
-    const cn6 = (actsL.LR > thr || actsR.LR > thr);
-    document.getElementById("cn3").classList.toggle("on", cn3);
-    document.getElementById("cn4").classList.toggle("on", cn4);
-    document.getElementById("cn6").classList.toggle("on", cn6);
+    const cn3Node = document.getElementById("cn3");
+    const cn4Node = document.getElementById("cn4");
+    const cn6Node = document.getElementById("cn6");
+
+    if (cn3Node && cn4Node && cn6Node) {
+        cn3Node.classList.toggle("on", (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr));
+        cn4Node.classList.toggle("on", (actsL.SO > thr || actsR.SO > thr));
+        cn6Node.classList.toggle("on", (actsL.LR > thr || actsR.LR > thr));
+    }
   }
   renderer.render(scene, camera);
 }
 animate();
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
