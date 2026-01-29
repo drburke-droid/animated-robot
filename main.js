@@ -5,14 +5,14 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Swapping Titles Only) ---
+// --- 1. UI Initialization (Literal Title Swap) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Right Eye (OD)" }, // Swapped label
-    { id: "musclesR", key: "right", label: "Left Eye (OS)" }  // Swapped label
+    { id: "musclesL", key: "left", label: "Right Eye (OD)" }, // Literal text change
+    { id: "musclesR", key: "right", label: "Left Eye (OS)" }  // Literal text change
   ];
 
   sides.forEach(s => {
@@ -61,7 +61,7 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
-// --- 3. Scene Setup ---
+// --- 3. Three.js Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -116,7 +116,8 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     scene.add(model);
-    document.getElementById("loading").style.display = "none";
+    const loadEl = document.getElementById("loading");
+    if (loadEl) loadEl.style.display = "none";
     APP_STATE.ready = true;
     animate();
   });
@@ -144,11 +145,11 @@ function animate() {
     const pitch = Math.asin(direction.y);
 
     const clampedYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
-    const clampedPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
+    const clampedPitch = THREE.MathUtils.clamp(clampedYaw, -0.4, 0.4); // Logic stability fix
 
-    item.mesh.rotation.set(-clampedPitch, clampedYaw, 0, 'YXZ');
+    item.mesh.rotation.set(-pitch, yaw, 0, 'YXZ');
     
-    const acts = getRecruitment(item.isRight, clampedYaw, clampedPitch);
+    const acts = getRecruitment(item.isRight, clampedYaw, pitch);
     
     MUSCLES.forEach(m => {
       const v = THREE.MathUtils.clamp(acts[m], 0, 1);
