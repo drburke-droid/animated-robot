@@ -3,26 +3,41 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const APP = document.getElementById("app");
 
-// --- 1. Scene Setup ---
+// --- 1. Scene & Camera Setup ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
+scene.background = new THREE.Color(0x050505); // Slightly off-black for depth
 
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.01, 100);
-camera.position.set(0, 0, 5); // Positioned for a natural portrait view
+camera.position.set(0, 0, 5); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true; // Enable Shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 APP.appendChild(renderer.domElement);
 
-// --- 2. Lighting ---
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2.5));
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+// --- 2. Enhanced Lighting ---
+scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 1.5));
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
 keyLight.position.set(5, 5, 5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
 scene.add(keyLight);
 
-// --- 3. Interaction & Raycasting ---
+// Rim Light (back-side) to catch the edges of the head
+const rimLight = new THREE.DirectionalLight(0xffffff, 1.5);
+rimLight.position.set(-5, 2, -5);
+scene.add(rimLight);
+
+// Eye Catchlight (Point light near camera)
+const eyeLight = new THREE.PointLight(0xffffff, 0.8);
+eyeLight.position.set(0, 0, 4);
+scene.add(eyeLight);
+
+// --- 3. Interaction ---
 const mouseNDC = new THREE.Vector2(0, 0);
 let hasPointer = false;
 
@@ -37,13 +52,12 @@ const raycaster = new THREE.Raycaster();
 const target = new THREE.Vector3(0, 0, 2);
 const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5); 
 
-// --- 4. Model State ---
+// --- 4. State & UI ---
 let model = null, eyeL = null, eyeR = null;
-const MAX_YAW = THREE.MathUtils.degToRad(30);
-const MAX_PITCH = THREE.MathUtils.degToRad(22);
+const MAX_YAW = THREE.MathUtils.degToRad(25);
+const MAX_PITCH = THREE.MathUtils.degToRad(18);
 let yawSm = 0, pitchSm = 0;
 
-// --- 5. Anatomical Logic & UI ---
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 
 function makeMusclePanel(id) {
@@ -51,12 +65,7 @@ function makeMusclePanel(id) {
   if (!el) return;
   el.innerHTML = "";
   MUSCLES.forEach(m => {
-    el.innerHTML += `
-      <div class="row">
-        <div>${m}</div>
-        <div class="barWrap"><div class="bar" data-muscle="${m}"></div></div>
-        <div class="pct" data-pct="${m}">0%</div>
-      </div>`;
+    el.innerHTML += `<div class="row"><div>${m}</div><div class="barWrap"><div class="bar" data-muscle="${m}"></div></div><div class="pct" data-pct="${m}">0%</div></div>`;
   });
 }
 makeMusclePanel("musclesL");
@@ -80,69 +89,52 @@ function setCN(cn3, cn4, cn6) {
   document.getElementById("cn6").classList.toggle("on", cn6);
 }
 
-/**
- * Anatomically Accurate Muscle Engagement
- * Accounts for primary vs secondary actions based on eye abduction/adduction
- */
 function getMuscleActs(isRight, yNorm, pNorm) {
-  const tone = 0.15; // Baseline resting engagement
-  const range = 0.85;
-
-  // Directions
-  const gazeOut = isRight ? Math.max(0, yNorm) : Math.max(0, -yNorm); // Abduction
-  const gazeIn = isRight ? Math.max(0, -yNorm) : Math.max(0, yNorm);  // Adduction
-  const up = Math.max(0, pNorm);
-  const down = Math.max(0, -pNorm);
-
-  // Efficiency Factors: 
-  // Vertical Recti are strongest when eye is out. 
-  // Obliques are strongest when eye is in.
-  const effRecti = 0.4 + (gazeOut * 0.6); 
-  const effObliques = 0.4 + (gazeIn * 0.6);
-
-  return {
-    LR: tone + (gazeOut * range),
-    MR: tone + (gazeIn * range),
-    SR: tone + (up * effRecti * range),
-    IR: tone + (down * effRecti * range),
-    SO: tone + (down * effObliques * range),
-    IO: tone + (up * effObliques * range)
-  };
+  const t = 0.15, r = 0.85;
+  const gOut = isRight ? Math.max(0, yNorm) : Math.max(0, -yNorm);
+  const gIn = isRight ? Math.max(0, -yNorm) : Math.max(0, yNorm);
+  const u = Math.max(0, pNorm), d = Math.max(0, -pNorm);
+  const eR = 0.4 + (gOut * 0.6), eO = 0.4 + (gIn * 0.6);
+  return { LR: t+(gOut*r), MR: t+(gIn*r), SR: t+(u*eR*r), IR: t+(d*eR*r), SO: t+(d*eO*r), IO: t+(u*eO*r) };
 }
 
-// --- 6. Model Loading & Normalization ---
+// --- 5. Loading & Shadows ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   scene.add(model);
 
-  // Normalize Scale & Position
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-
-  // Scale the model so it is always 1.8 units high in Three.js world
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
-
-  // Shift model so the center of geometry is at origin, then down slightly for framing
-  model.position.x = -center.x * scale;
-  model.position.y = (-center.y * scale) - 0.25; 
-  model.position.z = -center.z * scale;
+  model.position.set(-center.x * scale, (-center.y * scale) - 0.25, -center.z * scale);
 
   model.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+      
+      const name = o.name.toLowerCase();
+      if (name.includes("cornea")) {
+        o.material = new THREE.MeshPhysicalMaterial({
+          transmission: 1.0, ior: 1.33, roughness: 0, transparent: true, opacity: 0.1, depthWrite: false, color: 0xffffff
+        });
+        o.renderOrder = 10;
+        o.castShadow = false; // Cornea shouldn't block much light
+      } else if (name.includes("iris") || name.includes("sclera")) {
+        o.renderOrder = 1;
+      }
+    }
     if (o.name === "Eye_L") eyeL = o;
     if (o.name === "Eye_R") eyeR = o;
-    if (o.isMesh && o.material) {
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach(m => { if(m.transparent) m.depthWrite = false; });
-    }
   });
 
   camera.lookAt(0, 0, 0);
   model.updateMatrixWorld(true);
 });
 
-// --- 7. Animation Loop ---
+// --- 6. Animation Loop ---
 function animate() {
   requestAnimationFrame(animate);
 
@@ -154,35 +146,27 @@ function animate() {
       target.lerp(new THREE.Vector3(0, 0, 2), 0.05);
     }
 
-    // Gaze math relative to center
     const yawVal = Math.atan2(target.x, target.z);
     const pitchVal = Math.atan2(-target.y, target.z);
 
-    // Smoothing
     yawSm = THREE.MathUtils.lerp(yawSm, THREE.MathUtils.clamp(yawVal, -MAX_YAW, MAX_YAW), 0.1);
     pitchSm = THREE.MathUtils.lerp(pitchSm, THREE.MathUtils.clamp(pitchVal, -MAX_PITCH, MAX_PITCH), 0.1);
 
-    // Apply rotation (YXZ order prevents gimbal lock for eyes)
     eyeL.rotation.set(pitchSm, yawSm, 0, 'YXZ');
     eyeR.rotation.set(pitchSm, yawSm, 0, 'YXZ');
 
-    // Calculate Engagement
     const actsL = getMuscleActs(false, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
     const actsR = getMuscleActs(true, yawSm/MAX_YAW, pitchSm/MAX_PITCH);
-
-    // Update UI Bars
     updateUI("musclesL", actsL);
     updateUI("musclesR", actsR);
 
-    // Cranial Nerve Logic
-    const threshold = 0.25;
-    const cn3 = (actsL.MR > threshold || actsL.SR > threshold || actsL.IR > threshold || actsL.IO > threshold ||
-                 actsR.MR > threshold || actsR.SR > threshold || actsR.IR > threshold || actsR.IO > threshold);
-    const cn4 = (actsL.SO > threshold || actsR.SO > threshold);
-    const cn6 = (actsL.LR > threshold || actsR.LR > threshold);
-    setCN(cn3, cn4, cn6);
+    const thr = 0.25;
+    setCN(
+      (actsL.MR > thr || actsL.SR > thr || actsL.IR > thr || actsL.IO > thr || actsR.MR > thr || actsR.SR > thr || actsR.IR > thr || actsR.IO > thr),
+      (actsL.SO > thr || actsR.SO > thr),
+      (actsL.LR > thr || actsR.LR > thr)
+    );
   }
-
   renderer.render(scene, camera);
 }
 animate();
