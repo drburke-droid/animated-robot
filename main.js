@@ -1,16 +1,17 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-// --- Global Config ---
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization ---
+// --- 1. UI Setup (Fixed Panel Alignment) ---
 function initUI() {
+  // We explicitly map the Subject's Left Eye to the Left side of the screen for user clarity
   const sides = [{ id: "musclesL", key: "left" }, { id: "musclesR", key: "right" }];
   sides.forEach(s => {
     const container = document.getElementById(s.id);
+    container.innerHTML = `<div class="panel-title">${s.key === 'left' ? 'Left Eye (OS)' : 'Right Eye (OD)'}</div>`;
     MUSCLES.forEach(m => {
       const row = document.createElement("div");
       row.className = "row";
@@ -25,36 +26,41 @@ function initUI() {
   uiCache.cn.cn3 = document.getElementById("cn3");
   uiCache.cn.cn4 = document.getElementById("cn4");
   uiCache.cn.cn6 = document.getElementById("cn6");
-  document.getElementById("hud").style.opacity = "1";
+  document.getElementById("hud-container").style.opacity = "1";
 }
 
-// --- 2. Anatomical Math (Deep Dive Accuracy) ---
+// --- 2. Corrected Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
-  // Invert yaw for the left eye so "Out" is always positive
+  const range = 0.80; 
+
+  // Yaw: Positive is looking to the Subject's Right
+  // For Right Eye: Positive Yaw = Abduction (LR). Negative = Adduction (MR)
+  // For Left Eye: Positive Yaw = Adduction (MR). Negative = Abduction (LR)
   const abduction = isRight ? yaw : -yaw; 
   
-  // 1. Horizontal Recti
-  const lr = tone + Math.max(0, abduction * 0.8);
-  const mr = tone + Math.max(0, -abduction * 0.8);
+  // Pitch: Positive Pitch in our math now means looking UP
+  const up = Math.max(0, pitch);
+  const down = Math.max(0, -pitch);
 
-  // 2. Vertical Mechanical Advantage
-  // Recti (SR/IR) are primary movers in Abduction (looking out)
-  const rectiEff = 0.4 + (Math.max(0, abduction) * 0.6);
-  // Obliques (SO/IO) are primary movers in Adduction (looking in)
-  const oblEff = 0.4 + (Math.max(0, -abduction) * 0.6);
+  const gazeOut = Math.max(0, abduction);
+  const gazeIn = Math.max(0, -abduction);
+
+  // Efficiency Factors (H-Test Mechanics)
+  const rectiEff = 0.4 + (gazeOut * 0.6); 
+  const oblEff = 0.4 + (gazeIn * 0.6);
 
   return {
-    LR: lr,
-    MR: mr,
-    SR: tone + (Math.max(0, pitch) * rectiEff),
-    IR: tone + (Math.max(0, -pitch) * rectiEff),
-    IO: tone + (Math.max(0, pitch) * oblEff), // IO elevates in adduction
-    SO: tone + (Math.max(0, -pitch) * oblEff) // SO depresses in adduction
+    LR: tone + (gazeOut * range),
+    MR: tone + (gazeIn * range),
+    SR: tone + (up * rectiEff * range),   // Elevates
+    IR: tone + (down * rectiEff * range), // Depresses
+    IO: tone + (up * oblEff * range),     // Elevates (best in adduction)
+    SO: tone + (down * oblEff * range)    // Depresses (best in adduction)
   };
 }
 
-// --- 3. Three.js Setup ---
+// --- 3. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -75,7 +81,7 @@ scene.add(key);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5);
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.0); // Moved plane closer
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
@@ -89,12 +95,10 @@ window.addEventListener("pointermove", (e) => {
 initUI();
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
-  
-  // Normalize Model
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const scale = 2.0 / size.y;
+  const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
   model.position.set(-center.x * scale, -center.y * scale - 0.2, -center.z * scale);
   
@@ -114,12 +118,9 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
   animate();
-}, undefined, (err) => {
-  document.getElementById("loading").innerText = "ERROR LOADING MODEL: Check console.";
-  console.error(err);
 });
 
-// --- 5. Optimized Loop ---
+// --- 5. Corrected Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -131,16 +132,17 @@ function animate() {
     targetVec.lerp(new THREE.Vector3(0, 0, 2), 0.05);
   }
 
-  // Calculate Angles
-  const yaw = THREE.MathUtils.clamp(Math.atan2(targetVec.x, 3), -0.5, 0.5);
-  const pitch = THREE.MathUtils.clamp(Math.atan2(-targetVec.y, 3), -0.3, 0.3);
+  // SENSITIVITY FIX: Dividers (1.5 and 1.0) reduced to make eyes move more per mouse pixel
+  const yaw = THREE.MathUtils.clamp(Math.atan2(targetVec.x, 1.5), -0.6, 0.6);
+  const pitch = THREE.MathUtils.clamp(Math.atan2(targetVec.y, 1.0), -0.4, 0.4); 
 
   if (eyeL && eyeR) {
-    eyeL.rotation.set(pitch, yaw, 0, 'YXZ');
-    eyeR.rotation.set(pitch, yaw, 0, 'YXZ');
+    // In Three.js, rotation.x is the vertical tilt. 
+    // We use negative pitch because a positive X rotation usually tilts DOWN.
+    eyeL.rotation.set(-pitch, yaw, 0, 'YXZ');
+    eyeR.rotation.set(-pitch, yaw, 0, 'YXZ');
   }
 
-  // Update UI Panels
   const actsL = getRecruitment(false, yaw, pitch);
   const actsR = getRecruitment(true, yaw, pitch);
 
@@ -153,7 +155,6 @@ function animate() {
     });
   });
 
-  // Nerve Activation Pills
   const t = 0.26;
   uiCache.cn.cn3.classList.toggle("on", actsL.MR > t || actsL.SR > t || actsL.IR > t || actsL.IO > t || actsR.MR > t || actsR.SR > t || actsR.IR > t || actsR.IO > t);
   uiCache.cn.cn4.classList.toggle("on", actsL.SO > t || actsR.SO > t);
