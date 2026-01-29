@@ -2,16 +2,17 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
+const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 5 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
+// --- 1. UI Initialization (Flipped Labels & Physical Sides) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Right Eye (OD)" },
-    { id: "musclesR", key: "right", label: "Left Eye (OS)" }
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" },  // Box on Screen-Left
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" } // Box on Screen-Right
   ];
 
   sides.forEach(s => {
@@ -57,10 +58,11 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
+// --- 2. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020202);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 0, 5);
+camera.position.set(0, 0, APP_STATE.zoom);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -70,7 +72,6 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById("app").appendChild(renderer.domElement);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.3));
-
 const penlight = new THREE.PointLight(0xffffff, 80, 12);
 penlight.castShadow = true;
 penlight.shadow.bias = -0.0005; 
@@ -83,42 +84,43 @@ const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
+// --- 3. Events (Mouse Move & Wheel Zoom) ---
 window.addEventListener("pointermove", (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   APP_STATE.hasPointer = true;
 });
 
+window.addEventListener("wheel", (e) => {
+  APP_STATE.zoom += e.deltaY * 0.005;
+  APP_STATE.zoom = THREE.MathUtils.clamp(APP_STATE.zoom, 2, 10);
+  camera.position.z = APP_STATE.zoom;
+}, { passive: true });
+
 initUI();
 
+// --- 4. Model Loading ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
-  model.position.y = -0.3;
+  model.position.y = -0.6; // Lowered head position
 
   model.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true;
       o.receiveShadow = true;
-      
       if (o.name.toLowerCase().includes("cornea")) {
         o.material = new THREE.MeshPhysicalMaterial({ 
-          transmission: 1.0, 
-          roughness: 0, 
-          ior: 1.45, 
-          thickness: 0.1, 
-          specularIntensity: 2.0, 
-          transparent: true, 
-          opacity: 1 
+          transmission: 1.0, roughness: 0, ior: 1.45, thickness: 0.1, 
+          specularIntensity: 2.0, transparent: true, opacity: 1 
         });
         o.renderOrder = 10;
       }
       if (o.name.toLowerCase().includes("iris")) {
-        o.material.roughness = 1;
-        o.material.metalness = 0;
+        o.material.roughness = 1; o.material.metalness = 0;
         o.material.emissive = new THREE.Color(0x111111);
       }
     }
@@ -132,6 +134,7 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   animate();
 });
 
+// --- 5. Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -145,9 +148,7 @@ function animate() {
     penlight.position.copy(targetVec);
   }
 
-  // --- DATA INVERSION APPLIED HERE ---
-  // eyeL (Subject Left) now maps to 'left' cache (Observer Left Box)
-  // eyeR (Subject Right) now maps to 'right' cache (Observer Right Box)
+  // --- MAPPING REVERSED PER REQUEST ---
   const configs = [
     { mesh: eyeL, isRight: false, side: "left" }, 
     { mesh: eyeR, isRight: true, side: "right" }
@@ -181,6 +182,7 @@ function animate() {
     else APP_STATE.currentActsL = acts;
   });
 
+  // Nerve Status
   const t = 0.28;
   const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
   if (aL && aR) {
