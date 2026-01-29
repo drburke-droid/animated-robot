@@ -5,14 +5,13 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Right Eye (OD)" }, 
-    { id: "musclesR", key: "right", label: "Left Eye (OS)" }  
+    { id: "musclesL", key: "left", label: "Right Eye (OD)" },
+    { id: "musclesR", key: "right", label: "Left Eye (OS)" }
   ];
 
   sides.forEach(s => {
@@ -22,7 +21,7 @@ function initUI() {
     MUSCLES.forEach(m => {
       const row = document.createElement("div");
       row.className = "row";
-      row.innerHTML = `<div class="m-label">${m}</div><div class="barWrap"><div class="bar"></div></div><div class="pct">20%</div>`;
+      row.innerHTML = `<div class="m-label">${m}</div><div class="barWrap"><div class="bar"></div></div><div class="pct">0%</div>`;
       el.appendChild(row);
       uiCache[s.key][m] = { bar: row.querySelector(".bar"), pct: row.querySelector(".pct") };
     });
@@ -35,10 +34,9 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
-  const range = 1.6; 
+  const range = 1.6; // High responsiveness
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
   const up = Math.max(0, pitch);
@@ -59,7 +57,6 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
-// --- 3. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050505);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -71,18 +68,14 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 document.getElementById("app").appendChild(renderer.domElement);
 
-// Global Fill Light (Dim to keep contrast high)
-scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.5));
-
-// PENLIGHT: PointLight attached to cursor target
-const penlight = new THREE.PointLight(0xffffff, 50, 10); // High intensity for reflex
+scene.add(new THREE.HemisphereLight(0xffffff, 0x000000, 0.4));
+const penlight = new THREE.PointLight(0xffffff, 60, 10);
 penlight.castShadow = true;
-penlight.shadow.bias = -0.0001;
 scene.add(penlight);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -3.0); 
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
@@ -92,37 +85,25 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// --- 4. Loading & Material Overrides ---
 initUI();
+
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
-  model.position.set(-center.x * scale, -center.y * scale - 0.2, -center.z * scale);
-  
+  model.position.y = -0.3;
+
   model.traverse(o => {
     if (o.isMesh) {
-      o.castShadow = true; o.receiveShadow = true;
-      
-      // Override Cornea for Maximum Transparency/Reflex
+      o.castShadow = true;
       if (o.name.toLowerCase().includes("cornea")) {
-        o.material = new THREE.MeshPhysicalMaterial({ 
-          color: 0xffffff,
-          transmission: 1.0, 
-          roughness: 0, 
-          ior: 1.5, 
-          thickness: 0.1,
-          transparent: true,
-          opacity: 1
-        });
+        o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0.05, ior: 1.4, thickness: 0.1, transparent: true, opacity: 1 });
         o.renderOrder = 10;
       }
-      // Ensure Iris is Matte
       if (o.name.toLowerCase().includes("iris")) {
-        o.material.roughness = 1.0;
+        o.material.roughness = 1;
         o.material.metalness = 0;
       }
     }
@@ -134,9 +115,8 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
   animate();
-});
+}, undefined, (err) => console.error("Verify head_eyes_v1.glb filename/path", err));
 
-// --- 5. Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -144,48 +124,43 @@ function animate() {
   if (APP_STATE.hasPointer) {
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(gazePlane, targetVec);
-    penlight.position.copy(targetVec); // Light follows mouse
+    penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.5);
   } else {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
     penlight.position.copy(targetVec);
   }
 
-  const eyes = [
-    { mesh: eyeL, isRight: false, side: "right" }, // Screen Right = Person Left
-    { mesh: eyeR, isRight: true, side: "left" }    // Screen Left = Person Right
+  // Eye Data Mapping: Left box = Right Eye data
+  const configs = [
+    { mesh: eyeL, isRight: false, side: "right" }, 
+    { mesh: eyeR, isRight: true, side: "left" }
   ];
 
-  eyes.forEach(item => {
+  configs.forEach(item => {
     if (!item.mesh) return;
     const eyeWorldPos = new THREE.Vector3();
     item.mesh.getWorldPosition(eyeWorldPos);
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
-
     const yaw = Math.atan2(direction.x, direction.z);
     const pitch = Math.asin(direction.y);
 
-    const clampedYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
-    const clampedPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
-
-    item.mesh.rotation.set(-clampedPitch, clampedYaw, 0, 'YXZ');
+    const cYaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
+    const cPitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
+    item.mesh.rotation.set(-cPitch, cYaw, 0, 'YXZ');
     
-    const acts = getRecruitment(item.isRight, clampedYaw, clampedPitch);
-    
+    const acts = getRecruitment(item.isRight, cYaw, cPitch);
     MUSCLES.forEach(m => {
-      // Scale 0.7 to 100% UI, but cap text at 100%
-      const visualPct = THREE.MathUtils.clamp(acts[m] / 0.7, 0, 1);
-      const displayPct = THREE.MathUtils.clamp(Math.round((acts[m] / 0.7) * 100), 0, 100);
-
+      const visualVal = THREE.MathUtils.clamp(acts[m] / 0.7, 0, 1);
+      const displayVal = THREE.MathUtils.clamp(Math.round((acts[m] / 0.7) * 100), 0, 100);
       const cache = uiCache[item.side][m];
-      cache.bar.style.width = (visualPct * 100) + "%";
-      cache.pct.innerText = displayPct + "%";
+      cache.bar.style.width = (visualVal * 100) + "%";
+      cache.pct.innerText = displayVal + "%";
     });
 
     if (item.isRight) APP_STATE.currentActsR = acts;
     else APP_STATE.currentActsL = acts;
   });
 
-  // Nerve Logic
   const t = 0.28;
   const aL = APP_STATE.currentActsL; const aR = APP_STATE.currentActsR;
   if (aL && aR) {
@@ -195,9 +170,3 @@ function animate() {
   }
   renderer.render(scene, camera);
 }
-
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
