@@ -10,9 +10,9 @@ function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
-  // We map IDs based on SCREEN position
-  // musclesR is on the Left side of the screen (Person's Right)
-  // musclesL is on the Right side of the screen (Person's Left)
+  // Mirroring logic:
+  // musclesR (Person's Right Eye) -> physically on the LEFT of screen
+  // musclesL (Person's Left Eye) -> physically on the RIGHT of screen
   const sides = [
     { id: "musclesR", key: "right", label: "Right Eye (OD)" },
     { id: "musclesL", key: "left", label: "Left Eye (OS)" }
@@ -38,16 +38,13 @@ function initUI() {
   return true;
 }
 
-// --- 2. Corrected Anatomical Logic ---
+// --- 2. Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 0.80; 
 
-  // Yaw logic: 
-  // For the Person's Right Eye (OD): Yaw > 0 is looking toward the right ear (Abduction)
-  // For the Person's Left Eye (OS): Yaw > 0 is looking toward the nose (Adduction)
-  
   // Normalize abduction: Positive = looking away from nose
+  // If isRight=true, positive yaw is Abduction. If isRight=false, negative yaw is Abduction.
   const abduction = isRight ? yaw : -yaw; 
   const adduction = -abduction;
 
@@ -56,8 +53,9 @@ function getRecruitment(isRight, yaw, pitch) {
   const outVal = Math.max(0, abduction);
   const inVal = Math.max(0, adduction);
 
-  const rectiEff = 0.3 + (outVal * 0.7); 
-  const oblEff = 0.3 + (inVal * 0.7);
+  // Mechanical Advantage: Recti optimal at ~23deg out, Obliques at ~51deg in
+  const rectiEff = 0.4 + (outVal * 0.6); 
+  const oblEff = 0.4 + (inVal * 0.6);
 
   return {
     LR: tone + (outVal * range),
@@ -78,9 +76,11 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.5); 
+// FIX: Moved plane back to -2.0. -0.5 was too close, causing "crazy eyes".
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.0); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
@@ -108,6 +108,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const scale = 1.8 / size.y;
     model.scale.setScalar(scale);
     model.position.set(-center.x * scale, -center.y * scale - 0.2, -center.z * scale);
+    
     model.traverse(o => {
       if (o.isMesh) {
         o.castShadow = o.receiveShadow = true;
@@ -126,7 +127,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// --- 4. Fixed Animation Loop ---
+// --- 4. Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -138,25 +139,33 @@ function animate() {
     targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
   }
 
-  // Define eyes explicitly to avoid screen-position confusion
+  // Define eyes explicitly to map OD (Right Eye) data to the OD Box
   const eyeConfigs = [
-    { mesh: eyeL, isRight: false, side: "left" },
-    { mesh: eyeR, isRight: true, side: "right" }
+    { mesh: eyeL, isRight: false, side: "left" }, // OS
+    { mesh: eyeR, isRight: true, side: "right" }  // OD
   ];
 
   eyeConfigs.forEach(item => {
     if (!item.mesh) return;
     const eyeWorldPos = new THREE.Vector3();
     item.mesh.getWorldPosition(eyeWorldPos);
+    
+    // Calculate direction from this specific eye to the mouse
     const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-    const yaw = Math.atan2(direction.x, direction.z);
-    const pitch = Math.asin(direction.y);
+    // atan2 sensitivity boost. Clamp rotation to prevent "rolling back" into head
+    let yaw = Math.atan2(direction.x, direction.z);
+    let pitch = Math.asin(direction.y);
+
+    // Hard anatomical limit (approx 35 degrees)
+    yaw = THREE.MathUtils.clamp(yaw, -0.6, 0.6);
+    pitch = THREE.MathUtils.clamp(pitch, -0.4, 0.4);
 
     item.mesh.rotation.set(-pitch, yaw, 0, 'YXZ');
+    
+    // Use the yaw/pitch relative to the face, not the screen
     const acts = getRecruitment(item.isRight, yaw, pitch);
     
-    // Send data to the cached UI elements
     MUSCLES.forEach(m => {
       const v = THREE.MathUtils.clamp(acts[m], 0, 1);
       const cache = uiCache[item.side][m];
@@ -168,7 +177,7 @@ function animate() {
     else APP_STATE.currentActsL = acts;
   });
 
-  // Nerve Activation (Now uses the specific eye-assigned objects)
+  // Nerve Activation Status
   const t = 0.28;
   const aL = APP_STATE.currentActsL; 
   const aR = APP_STATE.currentActsR;
