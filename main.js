@@ -5,12 +5,12 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Ensures proper side-to-side mapping) ---
+// --- 1. UI Initialization (Swapped Labels for Intuitive Mirroring) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
-  // We map the Left Panel to the Left side of the user's screen
+  // We map the labels so the box on your left says "Left Eye" 
   const sides = [
     { id: "musclesL", key: "left", label: "Left Eye (OS)" },
     { id: "musclesR", key: "right", label: "Right Eye (OD)" }
@@ -46,33 +46,29 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Logic (Fixed Vertical Inversion) ---
+// --- 2. Anatomical Logic ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 0.80; 
 
-  // Yaw logic (looking at the person)
-  // Person's Right Eye: Mouse Right = Abduction (LR)
-  // Person's Left Eye: Mouse Right = Adduction (MR)
+  // Subject Gaze Perspective
   const abduction = isRight ? yaw : -yaw; 
   
-  // Pitch logic: pitch > 0 means looking UP
   const up = Math.max(0, pitch);
   const down = Math.max(0, -pitch);
   const gazeOut = Math.max(0, abduction);
   const gazeIn = Math.max(0, -abduction);
 
-  // Mechanical leverage scaling
   const rectiEff = 0.4 + (gazeOut * 0.6); 
   const oblEff = 0.4 + (gazeIn * 0.6);
 
   return {
     LR: tone + (gazeOut * range),
     MR: tone + (gazeIn * range),
-    SR: tone + (up * rectiEff * range),   // Elevates in Abduction
-    IR: tone + (down * rectiEff * range), // Depresses in Abduction
-    IO: tone + (up * oblEff * range),     // Elevates in Adduction
-    SO: tone + (down * oblEff * range)    // Depresses in Adduction
+    SR: tone + (up * rectiEff * range),
+    IR: tone + (down * rectiEff * range),
+    IO: tone + (up * oblEff * range),
+    SO: tone + (down * oblEff * range)
   };
 }
 
@@ -89,11 +85,12 @@ renderer.shadowMap.enabled = true;
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
-const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5);
+
+// CONVERGENCE FIX: Moved plane closer (to -0.8) to force more angular difference between eyes
+const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.8); 
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// Lighting with shadow bias to prevent face striation
 scene.add(new THREE.HemisphereLight(0xffffff, 0x111111, 2));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2);
 keyLight.position.set(5, 5, 5);
@@ -107,9 +104,9 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// --- 4. Bootstrapping (The Fix for 'null style') ---
 window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById("app").appendChild(renderer.domElement);
+  const appContainer = document.getElementById("app");
+  if(appContainer) appContainer.appendChild(renderer.domElement);
   
   if (initUI()) {
     new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
@@ -135,7 +132,8 @@ window.addEventListener('DOMContentLoaded', () => {
       });
 
       scene.add(model);
-      document.getElementById("loading").style.display = "none";
+      const loadEl = document.getElementById("loading");
+      if (loadEl) loadEl.style.display = "none";
       APP_STATE.ready = true;
       animate();
     });
@@ -151,35 +149,47 @@ function animate() {
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(gazePlane, targetVec);
   } else {
-    targetVec.lerp(new THREE.Vector3(0, 0, 2), 0.05);
+    targetVec.lerp(new THREE.Vector3(0, 0, 1), 0.05);
   }
 
-  // Increased sensitivity for eye movement
-  const yaw = THREE.MathUtils.clamp(Math.atan2(targetVec.x, 1.6), -0.6, 0.6);
-  const pitch = THREE.MathUtils.clamp(Math.atan2(targetVec.y, 1.1), -0.4, 0.4); 
+  // SENSITIVITY FIX: Dividers reduced (1.2 and 0.8) to maximize eye rotation range
+  // This calculates gaze for EACH eye separately to ensure convergence works
+  [ {eye: eyeL, isRight: false, side: "left"}, {eye: eyeR, isRight: true, side: "right"} ].forEach(item => {
+    if (!item.eye) return;
 
-  if (eyeL && eyeR) {
-    // Pitch is negative in rotation because +X tilts eye DOWN
-    eyeL.rotation.set(-pitch, yaw, 0, 'YXZ');
-    eyeR.rotation.set(-pitch, yaw, 0, 'YXZ');
-  }
+    // Get vector from eye world position to cursor target
+    const eyeWorldPos = new THREE.Vector3();
+    item.eye.getWorldPosition(eyeWorldPos);
+    const direction = new THREE.Vector3().subVectors(targetVec, eyeWorldPos).normalize();
 
-  const actsL = getRecruitment(false, yaw, pitch);
-  const actsR = getRecruitment(true, yaw, pitch);
+    // Decompose into Yaw (Horizontal) and Pitch (Vertical)
+    const yaw = Math.atan2(direction.x, direction.z);
+    const pitch = Math.asin(direction.y);
 
-  [ {data: actsL, side: "left"}, {data: actsR, side: "right"} ].forEach(obj => {
+    // Apply rotation
+    item.eye.rotation.set(-pitch, yaw, 0, 'YXZ');
+
+    // Update Recruitment
+    const acts = getRecruitment(item.isRight, yaw, pitch);
     MUSCLES.forEach(m => {
-      const v = THREE.MathUtils.clamp(obj.data[m], 0, 1);
-      const cache = uiCache[obj.side][m];
+      const v = THREE.MathUtils.clamp(acts[m], 0, 1);
+      const cache = uiCache[item.side][m];
       cache.bar.style.width = (v * 100) + "%";
       cache.pct.innerText = Math.round(v * 100) + "%";
     });
+
+    // Store for CN logic (using Right eye as proxy for bilateral trigger)
+    if (item.isRight) APP_STATE.currentActsR = acts;
+    else APP_STATE.currentActsL = acts;
   });
 
+  // Nerve Activation
   const t = 0.26;
-  if (uiCache.cn.cn3) uiCache.cn.cn3.classList.toggle("on", actsL.MR > t || actsL.SR > t || actsL.IR > t || actsL.IO > t || actsR.MR > t || actsR.SR > t || actsR.IR > t || actsR.IO > t);
-  if (uiCache.cn.cn4) uiCache.cn.cn4.classList.toggle("on", actsL.SO > t || actsR.SO > t);
-  if (uiCache.cn.cn6) uiCache.cn.cn6.classList.toggle("on", actsL.LR > t || actsR.LR > t);
+  const aL = APP_STATE.currentActsL;
+  const aR = APP_STATE.currentActsR;
+  if (uiCache.cn.cn3) uiCache.cn.cn3.classList.toggle("on", aL.MR > t || aL.SR > t || aL.IR > t || aL.IO > t || aR.MR > t || aR.SR > t || aR.IR > t || aR.IO > t);
+  if (uiCache.cn.cn4) uiCache.cn.cn4.classList.toggle("on", aL.SO > t || aR.SO > t);
+  if (uiCache.cn.cn6) uiCache.cn.cn6.classList.toggle("on", aL.LR > t || aR.LR > t);
 
   renderer.render(scene, camera);
 }
