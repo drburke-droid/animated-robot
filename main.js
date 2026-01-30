@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, headTilt: 0 };
+const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, headTilt: 0, calibration: { x: 0, y: 0 } };
 const uiCache = { left: {}, right: {} };
 
 const SYSTEM_STATE = {
@@ -45,6 +45,8 @@ window.resetSystem = () => {
   Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 1);
   ['right','left'].forEach(s => MUSCLES.forEach(m => SYSTEM_STATE.muscles[s][m] = 1));
   updateUIStyles();
+  // Trigger recalibration in the next frame
+  APP_STATE.calibrateNext = true;
 };
 
 window.toggleState = (id, side = null, m = null) => {
@@ -56,13 +58,12 @@ window.toggleState = (id, side = null, m = null) => {
 
 window.closeModal = () => document.getElementById('side-modal').style.display = 'none';
 window.applyPathology = (side) => {
-  resetSystem(); // Clean slate before applying preset
+  resetSystem();
   PATHOLOGIES[activePathName].f(side);
   updateUIStyles();
   closeModal();
 };
 
-// Fixed UI Styles logic to ensure side-panels light up
 function updateUIStyles() {
   Object.entries(SYSTEM_STATE.nerves).forEach(([id, v]) => {
     const el = document.getElementById(id); if(!el) return;
@@ -136,12 +137,11 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     else allowedYaw = targetYaw * h.MR;
   }
 
-  // Vertical logic check for Browm/Parinaud
   let allowedPitch;
   const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
-  if (targetPitch > 0) { // Up-gaze
+  if (targetPitch > 0) {
      allowedPitch = isNasal ? targetPitch * h.IO : targetPitch * h.SR;
-  } else { // Down-gaze
+  } else {
      allowedPitch = isNasal ? targetPitch * h.SO : targetPitch * h.IR;
   }
 
@@ -206,7 +206,7 @@ function animate() {
   if (APP_STATE.hasPointer) penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
   if (model) model.rotation.z = APP_STATE.headTilt;
 
-  let eyeResults = [];
+  let eyeRotations = [];
 
   [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
     if (!i.mesh) return;
@@ -216,7 +216,8 @@ function animate() {
     const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
     const res = getRecruitment(i.isR, yaw, pitch);
     i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
-    eyeResults.push(res.rotation);
+    
+    eyeRotations.push({ x: res.rotation.x, y: res.rotation.y });
 
     MUSCLES.forEach(m => {
       const cache = uiCache[i.s][m];
@@ -228,11 +229,23 @@ function animate() {
     });
   });
 
-  if(eyeResults.length === 2) {
-    const horizontalError = Math.abs(eyeResults[0].y - eyeResults[1].y);
-    const verticalError = Math.abs(eyeResults[0].x - eyeResults[1].x);
-    // Increased tolerance to 0.08 to prevent false positives in primary gaze
-    if (horizontalError > 0.08 || verticalError > 0.08) {
+  // --- IMPROVED DIPLOPIA CALCULATION ---
+  if(eyeRotations.length === 2) {
+    const rawDiffX = eyeRotations[0].y - eyeRotations[1].y;
+    const rawDiffY = eyeRotations[0].x - eyeRotations[1].x;
+
+    // Recalibrate on reset to zero out model geometry offsets
+    if (APP_STATE.calibrateNext) {
+      APP_STATE.calibration.y = rawDiffX;
+      APP_STATE.calibration.x = rawDiffY;
+      APP_STATE.calibrateNext = false;
+    }
+
+    const errorX = Math.abs(rawDiffX - APP_STATE.calibration.y);
+    const errorY = Math.abs(rawDiffY - APP_STATE.calibration.x);
+
+    // Threshold of ~4 degrees deviance from "Healthy" state
+    if (errorX > 0.07 || errorY > 0.07) {
       diplopiaWarn.style.display = 'block';
     } else {
       diplopiaWarn.style.display = 'none';
