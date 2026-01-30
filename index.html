@@ -3,144 +3,89 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clinical Neuro-Ophthalmology Simulator v2.0</title>
+  <title>Clinical Neuro-Ophthalmology Simulator v3.0</title>
   <style>
-    html, body { 
-      margin: 0; height: 100%; overflow: hidden; 
-      background: #000; color: #fff; 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; }
     #app { position: fixed; inset: 0; }
-    #loading { 
-      position: fixed; inset: 0; background: #050505; 
-      display: flex; align-items: center; justify-content: center; 
-      z-index: 2000; font-family: monospace; letter-spacing: 2px;
-    }
-    #hud-container { 
-      position: fixed; inset: 0; pointer-events: none; 
-      z-index: 10; opacity: 0; transition: opacity 1s ease; 
-      display: flex; flex-direction: column; justify-content: space-between;
-      padding: 20px;
-    }
-    #top-hud { align-self: center; display: flex; flex-direction: column; align-items: center; }
+    #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 5000; font-family: monospace; }
     
-    #side-hud { 
-      display: flex; justify-content: space-between; align-items: center; 
-      width: 100%; position: absolute; top: 50%; left: 0; transform: translateY(-50%);
-      padding: 0 40px; box-sizing: border-box;
-    }
-
-    #bottom-hud { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-
-    .panel { 
-      background: rgba(10, 10, 10, 0.92); 
-      border: 1px solid rgba(255, 255, 255, 0.15); 
-      border-radius: 12px; padding: 25px; 
-      backdrop-filter: blur(15px); box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-    }
-
-    .muscle-panel { width: 580px; }
-    .pathology-panel { width: 1000px; pointer-events: auto; }
-
-    .panel-title { 
-      color: #4cc9f0; font-weight: 900; margin-bottom: 15px; 
-      font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px;
-    }
-
-    .pathology-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-
-    .row { 
-      display: grid; grid-template-columns: 50px 1fr 60px; 
-      gap: 15px; align-items: center; margin: 12px 0; 
-    }
-
-    .clickable { pointer-events: auto; cursor: pointer; transition: all 0.2s ease; }
-    .clickable:hover { background: rgba(76, 201, 240, 0.2); transform: translateY(-1px); }
+    /* Layout Organization */
+    #hud-container { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: flex; flex-direction: column; padding: 10px; opacity: 0; transition: opacity 1s ease; }
     
-    .m-label { font-weight: bold; font-size: 14px; color: #4cc9f0; }
-    .paresis { color: #ffb703 !important; }
-    .paralysis { color: #ff4d6d !important; text-decoration: line-through; }
+    /* Top Ribbon: Pathologies and Nerves */
+    #top-ribbon { align-self: center; width: 98%; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+    .pathology-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; background: rgba(10,10,10,0.8); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    .cn-ribbon { display: flex; justify-content: center; gap: 20px; background: rgba(15,15,15,0.8); padding: 5px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
 
-    .barWrap { height: 10px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; overflow: hidden; }
+    /* Muscle Panels (Floating Sides) */
+    #side-hud { position: absolute; top: 50%; left: 0; width: 100%; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; }
+    .muscle-panel { width: 500px; background: rgba(10, 10, 10, 0.85); border-radius: 12px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+
+    /* Tooltip */
+    #tooltip { position: fixed; display: none; background: #1a1a1a; border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; z-index: 4000; font-size: 12px; max-width: 250px; pointer-events: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .tt-title { color: #4cc9f0; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; text-transform: uppercase; }
+    .tt-stat { color: #ffb703; font-size: 11px; margin: 4px 0; }
+
+    /* Components */
+    .pill { padding: 4px 8px; border-radius: 4px; border: 1px solid #4cc9f0; background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 10px; color: #4cc9f0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .clickable { cursor: pointer; pointer-events: auto; transition: all 0.2s; }
+    .clickable:hover { background: rgba(76, 201, 240, 0.2); transform: scale(1.02); }
+    .reset-btn { background: #ff4d6d; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    
+    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 10px; align-items: center; margin: 8px 0; }
+    .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
     .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
-    .pct { font-family: monospace; font-size: 14px; text-align: right; color: #4cc9f0; }
-
-    .pill { 
-      padding: 8px 12px; border-radius: 4px; border: 1px solid #4cc9f0; 
-      background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 11px; 
-      color: #4cc9f0; text-align: center;
-    }
-
-    /* Modal Styling */
-    #side-modal { 
-      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); 
-      z-index: 3000; align-items: center; justify-content: center; pointer-events: auto;
-    }
-
-    input[type=range] { width: 300px; cursor: pointer; pointer-events: auto; }
+    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
+    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
+    
+    #side-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 6000; align-items: center; justify-content: center; pointer-events: auto; }
   </style>
 </head>
 <body>
-  <div id="loading">SYNCHRONIZING PATHOLOGY DATABASE...</div>
+  <div id="loading">LOADING CLINICAL MODELS...</div>
+  <div id="tooltip"></div>
   <div id="app"></div>
 
   <div id="side-modal">
-    <div class="panel" style="width: 400px; text-align: center;">
-      <div class="panel-title" id="modal-disease-name">SELECT LATERALITY</div>
+    <div class="muscle-panel" style="width: 300px; text-align: center;">
+      <h3 id="modal-disease-name" style="color:#4cc9f0; font-size:14px; margin-top:0;">SELECT SIDE</h3>
       <div style="display: flex; gap: 10px; justify-content: center; margin: 20px 0;">
         <div class="pill clickable" id="btn-side-R" onclick="applyPathology('right')">RIGHT</div>
         <div class="pill clickable" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
         <div class="pill clickable" id="btn-side-L" onclick="applyPathology('left')">LEFT</div>
       </div>
-      <div class="clickable" style="color:#ff4d6d; font-size:12px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
+      <div class="clickable" style="color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
     </div>
   </div>
 
   <div id="hud-container">
-    <div id="top-hud">
-      <div class="panel" style="width: auto; pointer-events: auto;">
-        <div style="display: flex; gap: 20px;">
-          <div class="cn-group" id="cn-group-R">
-            <div class="m-label" style="margin-bottom:5px; font-size:10px">RIGHT NERVES (OD)</div>
-            <div style="display:flex; gap:5px;">
-              <div class="pill clickable" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
-              <div class="pill clickable" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
-              <div class="pill clickable" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
-            </div>
-          </div>
-          <div class="cn-group" id="cn-group-L">
-            <div class="m-label" style="margin-bottom:5px; font-size:10px">LEFT NERVES (OS)</div>
-            <div style="display:flex; gap:5px;">
-              <div class="pill clickable" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
-              <div class="pill clickable" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
-              <div class="pill clickable" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
-            </div>
-          </div>
+    <div id="top-ribbon">
+      <div class="pathology-grid" id="pathology-grid"></div>
+      <div class="cn-ribbon">
+        <button class="reset-btn" onclick="resetSystem()">RESET ALL</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span style="font-size:10px; color:#aaa;">OD:</span>
+          <div class="pill clickable" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
+          <div class="pill clickable" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
+          <div class="pill clickable" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
+        </div>
+        <div style="width:1px; background:#333;"></div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span style="font-size:10px; color:#aaa;">OS:</span>
+          <div class="pill clickable" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
+          <div class="pill clickable" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
+          <div class="pill clickable" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
         </div>
       </div>
     </div>
 
     <div id="side-hud">
-      <div class="panel muscle-panel" id="musclesR"></div> 
-      <div class="panel muscle-panel" id="musclesL"></div> 
-    </div>
-
-    <div id="bottom-hud">
-      <div class="panel pathology-panel">
-        <div class="panel-title">Pathology Library</div>
-        <div class="pathology-grid" id="pathology-grid"></div>
-      </div>
-      <div style="pointer-events: auto; text-align: center;">
-        <div style="font-size: 10px; color: #4cc9f0; margin-bottom: 5px;">HEAD TILT (BIELSCHOWSKY)</div>
-        <input type="range" id="tiltSlider" min="-30" max="30" value="0">
-      </div>
+      <div class="muscle-panel" id="musclesR"></div>
+      <div class="muscle-panel" id="musclesL"></div>
     </div>
   </div>
 
-  <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
-  </script>
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
   <script type="module" src="./main.js"></script>
 </body>
 </html>
