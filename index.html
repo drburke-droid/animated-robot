@@ -3,32 +3,148 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clinical Eye Simulation</title>
+  <title>Clinical Eye Simulation - OD/OS Swap</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: system-ui, sans-serif; }
-    #app { position: fixed; inset: 0; }
-    #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 1000; font-family: monospace; }
-    #hud-container { position: fixed; inset: 0; pointer-events: none; z-index: 10; opacity: 0; transition: opacity 1s ease; }
-    #side-hud { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; }
-    #top-hud { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); }
-    .panel { background: rgba(15, 15, 15, 0.9); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 18px; width: 195px; backdrop-filter: blur(12px); }
-    .panel-title { color: #4cc9f0; font-weight: 800; margin-bottom: 12px; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px; }
-    .row { display: grid; grid-template-columns: 32px 1fr 35px; gap: 10px; align-items: center; margin: 8px 0; }
-    .m-label { font-weight: bold; font-size: 10px; color: rgba(255, 255, 255, 0.6); }
-    .barWrap { height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 10px; overflow: hidden; }
-    .bar { height: 100%; width: 0%; background: #4cc9f0; box-shadow: 0 0 10px rgba(76, 201, 240, 0.5); transition: width 0.1s ease-out; }
-    .pct { font-family: monospace; font-size: 10px; text-align: right; color: #4cc9f0; }
-    .cnRow { display: flex; gap: 10px; justify-content: center; }
-    .pill { padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(20, 20, 20, 0.8); font-weight: bold; font-size: 10px; opacity: 0.15; transition: all 0.3s ease; }
-    .pill.on { opacity: 1; background: #f72585; border-color: #ff4d6d; box-shadow: 0 0 20px rgba(247, 37, 133, 0.6); }
+    html, body { 
+      margin: 0; 
+      height: 100%; 
+      overflow: hidden; 
+      background: #000; 
+      color: #fff; 
+      font-family: system-ui, -apple-system, sans-serif; 
+    }
+    
+    #app { 
+      position: fixed; 
+      inset: 0; 
+    }
+    
+    #loading { 
+      position: fixed; 
+      inset: 0; 
+      background: #050505; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      z-index: 1000; 
+      font-family: monospace; 
+      letter-spacing: 2px;
+    }
+
+    #hud-container { 
+      position: fixed; 
+      inset: 0; 
+      pointer-events: none; 
+      z-index: 10; 
+      opacity: 0; 
+      transition: opacity 1s ease; 
+    }
+
+    #side-hud { 
+      position: absolute; 
+      inset: 0; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      padding: 0 40px; 
+    }
+
+    #top-hud { 
+      position: absolute; 
+      top: 20px; 
+      left: 50%; 
+      transform: translateX(-50%); 
+    }
+
+    .panel { 
+      background: rgba(15, 15, 15, 0.85); 
+      border: 1px solid rgba(255, 255, 255, 0.15); 
+      border-radius: 12px; 
+      padding: 18px; 
+      width: 195px; 
+      backdrop-filter: blur(10px); 
+    }
+
+    .panel-title { 
+      color: #4cc9f0; 
+      font-weight: 800; 
+      margin-bottom: 12px; 
+      font-size: 11px; 
+      text-transform: uppercase; 
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1); 
+      padding-bottom: 6px; 
+      letter-spacing: 1px;
+    }
+
+    .row { 
+      display: grid; 
+      grid-template-columns: 32px 1fr 35px; 
+      gap: 10px; 
+      align-items: center; 
+      margin: 8px 0; 
+    }
+
+    .m-label { 
+      font-weight: bold; 
+      font-size: 10px; 
+      color: rgba(255, 255, 255, 0.5); 
+    }
+
+    .barWrap { 
+      height: 6px; 
+      background: rgba(255, 255, 255, 0.05); 
+      border-radius: 10px; 
+      overflow: hidden; 
+    }
+
+    .bar { 
+      height: 100%; 
+      width: 0%; 
+      background: #4cc9f0; 
+      box-shadow: 0 0 10px rgba(76, 201, 240, 0.4); 
+      transition: width 0.1s ease-out; 
+    }
+
+    .pct { 
+      font-family: monospace; 
+      font-size: 10px; 
+      text-align: right; 
+      color: #4cc9f0; 
+    }
+
+    .cnRow { 
+      display: flex; 
+      gap: 12px; 
+      justify-content: center; 
+    }
+
+    .pill { 
+      padding: 6px 14px; 
+      border-radius: 20px; 
+      border: 1px solid rgba(255, 255, 255, 0.1); 
+      background: rgba(20, 20, 20, 0.8); 
+      font-weight: bold; 
+      font-size: 10px; 
+      opacity: 0.2; 
+      transition: all 0.3s ease; 
+    }
+
+    .pill.on { 
+      opacity: 1; 
+      background: #f72585; 
+      border-color: #ff4d6d; 
+      box-shadow: 0 0 15px rgba(247, 37, 133, 0.5); 
+    }
   </style>
 </head>
 <body>
-  <div id="loading">LOADING CLINICAL ASSETS...</div>
+  <div id="loading">INITIALIZING CLINICAL VIEW...</div>
+  
   <div id="app"></div>
+
   <div id="hud-container">
     <div id="top-hud">
-      <div class="panel" style="width: auto; min-width: 280px;">
+      <div class="panel" style="width: auto; min-width: 260px;">
         <div class="cnRow">
           <div class="pill" id="cn3">CN III</div>
           <div class="pill" id="cn4">CN IV</div>
@@ -36,12 +152,22 @@
         </div>
       </div>
     </div>
+
     <div id="side-hud">
-      <div class="panel" id="musclesL"></div> <div class="panel" id="musclesR"></div> </div>
+      <div class="panel" id="musclesR"></div> 
+      <div class="panel" id="musclesL"></div> 
+    </div>
   </div>
+
   <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
   </script>
+
   <script type="module" src="./main.js"></script>
 </body>
 </html>
