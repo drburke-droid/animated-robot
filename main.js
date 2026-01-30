@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, headTilt: 0, calibration: { x: 0, y: 0 } };
+const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, headTilt: 0 };
 const uiCache = { left: {}, right: {} };
 
 const SYSTEM_STATE = {
@@ -14,27 +14,41 @@ const SYSTEM_STATE = {
 };
 
 const PATHOLOGIES = {
-  "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Down-and-out deviation with ptosis.", f: (side) => setNerve(side, 3, 0) },
-  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Superior oblique weakness causing hypertropia.", f: (side) => setNerve(side, 4, 0) },
-  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; esotropia in primary gaze.", f: (side) => setNerve(side, 6, 0) },
-  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Lesion of MLF; adduction deficit on side of lesion.", f: (side) => {
+  "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Oculomotor nerve palsy. Causes a 'down-and-out' eye position, ptosis (eyelid droop), and potentially a dilated pupil.", f: (side) => setNerve(side, 3, 0) },
+  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Trochlear nerve palsy affecting the Superior Oblique muscle. Causes vertical double vision and an upward drift (hypertropia).", f: (side) => setNerve(side, 4, 0) },
+  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abducens nerve palsy. Blocks outward movement (abduction) and causes the eye to drift inward (esotropia).", f: (side) => setNerve(side, 6, 0) },
+  "INO (MLF)": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Internuclear Ophthalmoplegia. Damage to the Medial Longitudinal Fasciculus (MLF). The eye on the side of the lesion cannot turn inward (adduct) during horizontal gaze.", f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves TED": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Restrictive myopathy; IR/MR usually thickest.", f: (side) => {
+  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. An autoimmune swelling of the muscles. Typically restricts the Inferior Rectus and Medial Rectus first.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
     t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
-  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "IR entrapment; limited vertical gaze.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
-  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; limited elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
-  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Fluctuating fatigue of NMJ.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
-  "Parinaud": { s: ['B'], prev: "0.1", desc: "Dorsal midbrain syndrome; up-gaze paralysis.", f: () => { ['right','left'].forEach(s => { SYSTEM_STATE.muscles[s].SR = 0; SYSTEM_STATE.muscles[s].IO = 0; }); }},
-  "Miller Fisher": { s: ['B'], prev: "0.05", desc: "Variant of GBS; acute total ophthalmoplegia.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }}
+  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture. The Inferior Rectus muscle becomes physically trapped in the bone, preventing upward gaze.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
+  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "Mechanical restriction of the Superior Oblique tendon. Prevents the eye from looking up when it is turned inward toward the nose.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
+  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis. An autoimmune breakdown of communication between nerves and muscles. Characterized by fluctuating fatigue and weakness.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
+  "Parinaud": { s: ['B'], prev: "0.1", desc: "Dorsal Midbrain Syndrome. Often caused by pineal gland tumors. Prevents upward gaze and causes convergence-retraction nystagmus.", f: () => { ['right','left'].forEach(s => { SYSTEM_STATE.muscles[s].SR = 0; SYSTEM_STATE.muscles[s].IO = 0; }); }},
+  "Miller Fisher": { s: ['B'], prev: "0.05", desc: "A rare variant of Guillain-Barré Syndrome (GBS). Causes acute, symmetrical paralysis of all eye movements and loss of reflexes.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
+  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "Lateral Medullary Syndrome (PICA Artery stroke). Causes skew deviation (one eye sits higher), Horner's syndrome, and balance loss.", f: (side) => { 
+    const isR = side === 'right'; 
+    SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; 
+    SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
+  }},
+  "AICA Stroke": { s: ['R', 'L'], prev: "0.1", desc: "Anterior Inferior Cerebellar Artery stroke. Often involves the CN VI nucleus and CN VII (facial) nerve, causing total gaze palsy to one side.", f: (side) => { setNerve(side, 6, 0); }},
+  "Foville Syn.": { s: ['R', 'L'], prev: "0.05", desc: "Brainstem lesion (Pons). Causes a combination of CN VI palsy, CN VII palsy (facial droop), and a loss of all horizontal gaze toward the lesion.", f: (side) => { setNerve(side, 6, 0); setNerve(side, 3, 0.5); }},
+  "Weber Syn.": { s: ['R', 'L'], prev: "0.1", desc: "Midbrain stroke. Causes a CN III palsy on the side of the stroke and weakness on the opposite side of the body.", f: (side) => { setNerve(side, 3, 0); }},
+  "Bielschowsky": { s: ['R', 'L'], prev: "0.5", desc: "Clinical sign of a CN IV (Trochlear) palsy. The upward drift of the eye worsens when the head is tilted toward the side of the palsy.", f: (side) => { setNerve(side, 4, 0); }},
+  "One-and-a-Half": { s: ['R', 'L'], prev: "0.1", desc: "Complex brainstem lesion. One eye is completely fixed horizontally; the other eye can only move outward (abduct).", f: (side) => {
+    const isR = side === 'right';
+    setNerve(side, 6, 0);
+    SYSTEM_STATE.muscles.right.MR = 0;
+    SYSTEM_STATE.muscles.left.MR = 0;
+  }}
 };
 
 let activePathName = null;
 const tooltip = document.getElementById('tooltip');
-const diplopiaWarn = document.getElementById('diplopia-warning');
 
 function setNerve(side, num, val) {
   if(side === 'both') { SYSTEM_STATE.nerves['R-CN'+num] = val; SYSTEM_STATE.nerves['L-CN'+num] = val; }
@@ -45,8 +59,6 @@ window.resetSystem = () => {
   Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 1);
   ['right','left'].forEach(s => MUSCLES.forEach(m => SYSTEM_STATE.muscles[s][m] = 1));
   updateUIStyles();
-  // Trigger recalibration in the next frame
-  APP_STATE.calibrateNext = true;
 };
 
 window.toggleState = (id, side = null, m = null) => {
@@ -206,8 +218,6 @@ function animate() {
   if (APP_STATE.hasPointer) penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
   if (model) model.rotation.z = APP_STATE.headTilt;
 
-  let eyeRotations = [];
-
   [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
     if (!i.mesh) return;
     const eyePos = new THREE.Vector3();
@@ -216,8 +226,6 @@ function animate() {
     const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
     const res = getRecruitment(i.isR, yaw, pitch);
     i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
-    
-    eyeRotations.push({ x: res.rotation.x, y: res.rotation.y });
 
     MUSCLES.forEach(m => {
       const cache = uiCache[i.s][m];
@@ -228,28 +236,5 @@ function animate() {
       cache.bar.style.background = valRaw < 0.05 ? "#ff4d6d" : (valRaw < 0.25 ? "#ffb703" : "#4cc9f0");
     });
   });
-
-  // --- IMPROVED DIPLOPIA CALCULATION ---
-  if(eyeRotations.length === 2) {
-    const rawDiffX = eyeRotations[0].y - eyeRotations[1].y;
-    const rawDiffY = eyeRotations[0].x - eyeRotations[1].x;
-
-    // Recalibrate on reset to zero out model geometry offsets
-    if (APP_STATE.calibrateNext) {
-      APP_STATE.calibration.y = rawDiffX;
-      APP_STATE.calibration.x = rawDiffY;
-      APP_STATE.calibrateNext = false;
-    }
-
-    const errorX = Math.abs(rawDiffX - APP_STATE.calibration.y);
-    const errorY = Math.abs(rawDiffY - APP_STATE.calibration.x);
-
-    // Threshold of ~4 degrees deviance from "Healthy" state
-    if (errorX > 0.07 || errorY > 0.07) {
-      diplopiaWarn.style.display = 'block';
-    } else {
-      diplopiaWarn.style.display = 'none';
-    }
-  }
   renderer.render(scene, camera);
 }
