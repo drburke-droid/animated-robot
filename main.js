@@ -5,13 +5,14 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6.5 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
+// --- 1. UI Initialization (Physically Swapped Boxes) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Left Eye (OS)" },
-    { id: "musclesR", key: "right", label: "Right Eye (OD)" }
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" }, // Now on Screen Left
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" }    // Now on Screen Right
   ];
 
   sides.forEach(s => {
@@ -34,13 +35,11 @@ function initUI() {
   return true;
 }
 
+// --- 2. Anatomical Recruitment (Keeping your accurate SO mechanics) ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 1.6; 
 
-  // Anatomical Correction:
-  // If cursor is at screen-left (negative yaw), that is the model's RIGHT.
-  // Therefore, for the Right Eye, negative yaw = abduction.
   const abduction = isRight ? -yaw : yaw; 
   const adduction = -abduction;
 
@@ -62,6 +61,7 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
+// --- 3. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020202);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -156,8 +156,8 @@ function animate() {
   }
 
   // Final Mapping Logic:
-  // eyeL (model left) -> side "left" (screen left box)
-  // eyeR (model right) -> side "right" (screen right box)
+  // eyeL (model left) -> side "left" cache
+  // eyeR (model right) -> side "right" cache
   const configs = [
     { mesh: eyeL, isRight: false, side: "left" }, 
     { mesh: eyeR, isRight: true, side: "right" }
