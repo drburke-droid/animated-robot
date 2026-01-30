@@ -16,8 +16,8 @@ const SYSTEM_STATE = {
 const PATHOLOGIES = {
   "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Down-and-out deviation with ptosis.", f: (side) => setNerve(side, 3, 0) },
   "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Superior oblique weakness causing hypertropia.", f: (side) => setNerve(side, 4, 0) },
-  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; most common ocular palsy.", f: (side) => setNerve(side, 6, 0) },
-  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Lesion of MLF; adduction deficit on side of lesion.", f: (side) => {
+  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; esotropia in primary gaze.", f: (side) => setNerve(side, 6, 0) },
+  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "MLF lesion; adduction deficit on side of lesion.", f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
@@ -107,10 +107,10 @@ function initUI() {
   document.getElementById("hud-container").style.opacity = "1";
 }
 
-// --- CORE CLINICAL LOGIC WITH DYNAMIC RE-SYNC ---
 function getRecruitment(isRight, targetYaw, targetPitch) {
   const side = isRight ? 'right' : 'left';
   const prefix = isRight ? 'R-' : 'L-';
+  
   const h = {
     LR: SYSTEM_STATE.nerves[prefix+'CN6'] * SYSTEM_STATE.muscles[side].LR,
     MR: SYSTEM_STATE.nerves[prefix+'CN3'] * SYSTEM_STATE.muscles[side].MR,
@@ -120,37 +120,34 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // 1. DYNAMIC DRIFT (HERING'S LAW COMPENSATION)
-  const rawDriftX = (1 - h.LR) * -0.45 + (1 - h.MR) * 0.45;
-  const rawDriftY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.25 : 0);
-  
-  // Resync logic: Reduce drift as eye moves into its functional nasal field
-  const abductionField = isRight ? (targetYaw < 0) : (targetYaw > 0);
-  const driftScale = abductionField ? 1.0 : Math.max(0, 1.0 - Math.abs(targetYaw) * 2.5);
-  
-  const activeDriftX = rawDriftX * driftScale;
-  const activeDriftY = rawDriftY;
+  // 1. BASE DRIFT (Resting Deviation)
+  const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
+  const driftY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.25 : 0);
 
-  // 2. MOTILITY MAPPING (CRISP RESPONSE)
+  // 2. MOTILITY COMMAND
+  // If moving nasally (adduction), health of MR is the only gate.
+  // If moving temporally (abduction), health of LR is the gate.
   const mX = targetYaw > 0 ? targetYaw * h.MR : targetYaw * h.LR;
   const mY = targetPitch > 0 ? targetPitch * h.SR * 1.4 : targetPitch * h.IR * 1.2;
 
-  const fYaw = activeDriftX + mX;
-  const fPit = activeDriftY + mY;
+  // 3. APPLY DRIFT AS OFFSET
+  // This ensures the eye adducts normally even if it's already "stuck" inward.
+  const finalYaw = mX + (isRight ? -driftX : driftX);
+  const finalPitch = mY + driftY;
 
-  const abd = isRight ? -fYaw : fYaw;
+  const abd = isRight ? -finalYaw : finalYaw;
   const add = -abd;
   const range = 1.8;
 
   return {
-    rotation: { y: fYaw, x: fPit },
+    rotation: { y: finalYaw, x: finalPitch },
     acts: {
       LR: (0.2 + Math.max(0, abd) * range) * h.LR,
       MR: (0.2 + Math.max(0, add) * range) * h.MR,
-      SR: (0.2 + Math.max(0, fPit) * 2.2) * h.SR,
-      IR: (0.2 + Math.max(0, -fPit) * 1.8) * h.IR,
-      IO: (0.2 + Math.max(0, fPit) * 2.0) * h.IO,
-      SO: (0.2 + Math.max(0, -fPit) * 1.8) * h.SO
+      SR: (0.2 + Math.max(0, finalPitch) * 2.2) * h.SR,
+      IR: (0.2 + Math.max(0, -finalPitch) * 1.8) * h.IR,
+      IO: (0.2 + Math.max(0, finalPitch) * 2.0) * h.IO,
+      SO: (0.2 + Math.max(0, -finalPitch) * 1.8) * h.SO
     }
   };
 }
