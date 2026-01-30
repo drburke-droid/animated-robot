@@ -23,10 +23,10 @@ const PATHOLOGIES = {
   }},
   "Graves TED": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Restrictive myopathy; IR/MR usually thickest.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
-    t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.5; SYSTEM_STATE.muscles[s].MR = 0.5; });
+    t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
   "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "IR entrapment; limited vertical gaze.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
-  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; limited elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0.1; }},
+  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; limited elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
   "Myasthenia": { s: ['B'], prev: "2.0", desc: "Fluctuating fatigue of NMJ.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
   "Parinaud": { s: ['B'], prev: "0.1", desc: "Dorsal midbrain syndrome; up-gaze paralysis.", f: () => { ['right','left'].forEach(s => { SYSTEM_STATE.muscles[s].SR = 0; SYSTEM_STATE.muscles[s].IO = 0; }); }},
   "Miller Fisher": { s: ['B'], prev: "0.05", desc: "Variant of GBS; acute total ophthalmoplegia.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }}
@@ -56,20 +56,23 @@ window.toggleState = (id, side = null, m = null) => {
 
 window.closeModal = () => document.getElementById('side-modal').style.display = 'none';
 window.applyPathology = (side) => {
+  resetSystem(); // Clean slate before applying preset
   PATHOLOGIES[activePathName].f(side);
   updateUIStyles();
   closeModal();
 };
 
+// Fixed UI Styles logic to ensure side-panels light up
 function updateUIStyles() {
   Object.entries(SYSTEM_STATE.nerves).forEach(([id, v]) => {
     const el = document.getElementById(id); if(!el) return;
     el.className = 'pill clickable' + (v === 0.5 ? ' paresis' : (v === 0 ? ' paralysis' : ''));
   });
   ['left','right'].forEach(s => {
+    const sideKey = s === 'left' ? 'L' : 'R';
     MUSCLES.forEach(m => {
       const v = SYSTEM_STATE.muscles[s][m];
-      const el = document.querySelector(`#muscles${s==='left'?'L':'R'} .m-label-${m}`);
+      const el = document.querySelector(`#muscles${sideKey} .m-label-${m}`);
       if(el) el.className = `m-label clickable m-label-${m}` + (v===0.5?' paresis':(v===0?' paralysis':''));
     });
   });
@@ -109,11 +112,9 @@ function initUI() {
   document.getElementById("tiltSlider").oninput = (e) => APP_STATE.headTilt = THREE.MathUtils.degToRad(e.target.value);
 }
 
-// --- UPDATED CORE CLINICAL LOGIC (ABDUCTION LOCK) ---
 function getRecruitment(isRight, targetYaw, targetPitch) {
   const side = isRight ? 'right' : 'left';
   const prefix = isRight ? 'R-' : 'L-';
-  
   const h = {
     LR: SYSTEM_STATE.nerves[prefix+'CN6'] * SYSTEM_STATE.muscles[side].LR,
     MR: SYSTEM_STATE.nerves[prefix+'CN3'] * SYSTEM_STATE.muscles[side].MR,
@@ -123,25 +124,29 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // 1. BASE DRIFT (Resting Deviation)
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.25 : 0);
 
-  // 2. STRICT MOTILITY GATE (The "Abduction Lock")
   let allowedYaw;
   if (isRight) {
-    if (targetYaw < 0) allowedYaw = targetYaw * h.LR; // Right abduction
-    else allowedYaw = targetYaw * h.MR;               // Right adduction
+    if (targetYaw < 0) allowedYaw = targetYaw * h.LR;
+    else allowedYaw = targetYaw * h.MR;
   } else {
-    if (targetYaw > 0) allowedYaw = targetYaw * h.LR; // Left abduction
-    else allowedYaw = targetYaw * h.MR;               // Left adduction
+    if (targetYaw > 0) allowedYaw = targetYaw * h.LR;
+    else allowedYaw = targetYaw * h.MR;
   }
 
-  const mY = targetPitch > 0 ? targetPitch * h.SR * 1.4 : targetPitch * h.IR * 1.2;
+  // Vertical logic check for Browm/Parinaud
+  let allowedPitch;
+  const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
+  if (targetPitch > 0) { // Up-gaze
+     allowedPitch = isNasal ? targetPitch * h.IO : targetPitch * h.SR;
+  } else { // Down-gaze
+     allowedPitch = isNasal ? targetPitch * h.SO : targetPitch * h.IR;
+  }
 
-  // 3. APPLY OFFSET
   const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
-  const finalPitch = mY + driftY;
+  const finalPitch = allowedPitch + driftY;
 
   const abd = isRight ? -finalYaw : finalYaw;
   const add = -abd;
@@ -207,10 +212,8 @@ function animate() {
     if (!i.mesh) return;
     const eyePos = new THREE.Vector3();
     i.mesh.getWorldPosition(eyePos);
-    
     const yaw = Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z);
     const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
-
     const res = getRecruitment(i.isR, yaw, pitch);
     i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
     eyeResults.push(res.rotation);
@@ -225,17 +228,15 @@ function animate() {
     });
   });
 
-  // --- DIPLOPIA INDICATOR CALCULATION ---
   if(eyeResults.length === 2) {
     const horizontalError = Math.abs(eyeResults[0].y - eyeResults[1].y);
     const verticalError = Math.abs(eyeResults[0].x - eyeResults[1].x);
-    // Tolerance approx 0.05 rad (~3 degrees)
-    if (horizontalError > 0.05 || verticalError > 0.05) {
+    // Increased tolerance to 0.08 to prevent false positives in primary gaze
+    if (horizontalError > 0.08 || verticalError > 0.08) {
       diplopiaWarn.style.display = 'block';
     } else {
       diplopiaWarn.style.display = 'none';
     }
   }
-
   renderer.render(scene, camera);
 }
