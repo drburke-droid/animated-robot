@@ -15,13 +15,13 @@ const SYSTEM_STATE = {
 
 const PATHOLOGIES = {
   "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Down-and-out deviation with ptosis.", f: (side) => setNerve(side, 3, 0) },
-  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Superior oblique weakness; hypertropia.", f: (side) => setNerve(side, 4, 0) },
-  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; esotropia in primary gaze.", f: (side) => setNerve(side, 6, 0) },
-  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "MLF lesion; adduction deficit on side of lesion.", f: (side) => {
+  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Superior oblique weakness causing hypertropia.", f: (side) => setNerve(side, 4, 0) },
+  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; most common ocular palsy.", f: (side) => setNerve(side, 6, 0) },
+  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Lesion of MLF; adduction deficit on side of lesion.", f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves TED": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Restrictive myopathy; primarily IR and MR.", f: (side) => {
+  "Graves TED": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Restrictive myopathy; IR/MR usually thickest.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
     t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.5; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
@@ -107,6 +107,7 @@ function initUI() {
   document.getElementById("hud-container").style.opacity = "1";
 }
 
+// --- CORE CLINICAL LOGIC WITH DYNAMIC RE-SYNC ---
 function getRecruitment(isRight, targetYaw, targetPitch) {
   const side = isRight ? 'right' : 'left';
   const prefix = isRight ? 'R-' : 'L-';
@@ -119,25 +120,33 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // DRIFT CALCULATIONS
-  const dX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
-  const dY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.2 : 0);
+  // 1. DYNAMIC DRIFT (HERING'S LAW COMPENSATION)
+  const rawDriftX = (1 - h.LR) * -0.45 + (1 - h.MR) * 0.45;
+  const rawDriftY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.25 : 0);
   
-  // SENSITIVITY FIX: Higher multiplier for pitch to fix "unresponsive superior gaze"
+  // Resync logic: Reduce drift as eye moves into its functional nasal field
+  const abductionField = isRight ? (targetYaw < 0) : (targetYaw > 0);
+  const driftScale = abductionField ? 1.0 : Math.max(0, 1.0 - Math.abs(targetYaw) * 2.5);
+  
+  const activeDriftX = rawDriftX * driftScale;
+  const activeDriftY = rawDriftY;
+
+  // 2. MOTILITY MAPPING (CRISP RESPONSE)
   const mX = targetYaw > 0 ? targetYaw * h.MR : targetYaw * h.LR;
   const mY = targetPitch > 0 ? targetPitch * h.SR * 1.4 : targetPitch * h.IR * 1.2;
 
-  const fYaw = dX + mX;
-  const fPit = dY + mY;
+  const fYaw = activeDriftX + mX;
+  const fPit = activeDriftY + mY;
 
   const abd = isRight ? -fYaw : fYaw;
   const add = -abd;
+  const range = 1.8;
 
   return {
     rotation: { y: fYaw, x: fPit },
     acts: {
-      LR: (0.2 + Math.max(0, abd) * 1.8) * h.LR,
-      MR: (0.2 + Math.max(0, add) * 1.8) * h.MR,
+      LR: (0.2 + Math.max(0, abd) * range) * h.LR,
+      MR: (0.2 + Math.max(0, add) * range) * h.MR,
       SR: (0.2 + Math.max(0, fPit) * 2.2) * h.SR,
       IR: (0.2 + Math.max(0, -fPit) * 1.8) * h.IR,
       IO: (0.2 + Math.max(0, fPit) * 2.0) * h.IO,
@@ -162,7 +171,6 @@ let model, eyeL, eyeR;
 window.addEventListener("pointermove", (e) => {
   const m = { x: (e.clientX/window.innerWidth)*2-1, y: -(e.clientY/window.innerHeight)*2+1 };
   const r = new THREE.Raycaster(); r.setFromCamera(m, camera);
-  // Re-adjusting the plane to eye level (approx -0.3 in the model's Y space)
   r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), -2.5), targetVec);
   APP_STATE.hasPointer = true;
 });
@@ -170,8 +178,7 @@ window.addEventListener("pointermove", (e) => {
 initUI();
 
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
-  model = gltf.scene; 
-  model.position.y = -1.6;
+  model = gltf.scene; model.position.y = -1.6;
   model.scale.setScalar(1.8 / new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y);
   model.traverse(o => {
     if (o.name === "Eye_L") eyeL = o; if (o.name === "Eye_R") eyeR = o;
@@ -193,8 +200,6 @@ function animate() {
     const eyePos = new THREE.Vector3();
     i.mesh.getWorldPosition(eyePos);
     
-    // CALIBRATION FIX: We calculate the angle relative to the eye's physical world position
-    // This ensures a true primary gaze when the cursor is between the eyes.
     const yaw = Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z);
     const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
 
@@ -204,7 +209,6 @@ function animate() {
     MUSCLES.forEach(m => {
       const cache = uiCache[i.s][m];
       const valRaw = res.acts[m];
-      // Cap at 100% and map to bar
       const valDisplay = Math.min(100, Math.round((valRaw / 0.7) * 100));
       cache.bar.style.width = valDisplay + "%";
       cache.pct.innerText = valDisplay + "%";
