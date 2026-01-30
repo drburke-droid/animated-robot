@@ -3,78 +3,135 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clinical Neuro-Ophthalmology Simulator v3.0</title>
+  <title>Neuro-Ophthalmology Simulator v3.1</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; }
+    html, body { 
+      margin: 0; height: 100%; overflow: hidden; 
+      background: #000; color: #fff; 
+      font-family: 'Segoe UI', Tahoma, sans-serif; 
+    }
     #app { position: fixed; inset: 0; }
-    #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 5000; font-family: monospace; }
+    #loading { 
+      position: fixed; inset: 0; background: #050505; 
+      display: flex; align-items: center; justify-content: center; 
+      z-index: 5000; font-family: monospace; 
+    }
     
     /* Layout Organization */
-    #hud-container { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: flex; flex-direction: column; padding: 10px; opacity: 0; transition: opacity 1s ease; }
+    #hud-container { 
+      position: fixed; inset: 0; pointer-events: none; 
+      z-index: 10; display: flex; flex-direction: column; 
+      padding: 10px; opacity: 0; transition: opacity 1s ease; 
+    }
     
     /* Top Ribbon: Pathologies and Nerves */
-    #top-ribbon { align-self: center; width: 98%; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
-    .pathology-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; background: rgba(10,10,10,0.8); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
-    .cn-ribbon { display: flex; justify-content: center; gap: 20px; background: rgba(15,15,15,0.8); padding: 5px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
+    #top-ribbon { 
+      align-self: center; width: 98%; display: flex; 
+      flex-direction: column; gap: 5px; pointer-events: auto; 
+    }
+    .pathology-grid { 
+      display: grid; grid-template-columns: repeat(8, 1fr); 
+      gap: 4px; background: rgba(10,10,10,0.85); 
+      padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); 
+    }
+    .cn-ribbon { 
+      display: flex; justify-content: center; gap: 25px; 
+      background: rgba(15,15,15,0.9); padding: 8px; 
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); 
+    }
 
     /* Muscle Panels (Floating Sides) */
-    #side-hud { position: absolute; top: 50%; left: 0; width: 100%; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; }
-    .muscle-panel { width: 500px; background: rgba(10, 10, 10, 0.85); border-radius: 12px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+    #side-hud { 
+      position: absolute; top: 55%; left: 0; width: 100%; 
+      transform: translateY(-50%); display: flex; 
+      justify-content: space-between; padding: 0 40px; box-sizing: border-box; 
+    }
+    .muscle-panel { 
+      width: 480px; background: rgba(10, 10, 10, 0.85); 
+      border-radius: 12px; padding: 18px; 
+      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); 
+    }
 
-    /* Tooltip */
-    #tooltip { position: fixed; display: none; background: #1a1a1a; border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; z-index: 4000; font-size: 12px; max-width: 250px; pointer-events: none; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-    .tt-title { color: #4cc9f0; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; text-transform: uppercase; }
-    .tt-stat { color: #ffb703; font-size: 11px; margin: 4px 0; }
+    /* Tooltip System */
+    #tooltip { 
+      position: fixed; display: none; background: #111; 
+      border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; 
+      z-index: 4000; font-size: 12px; max-width: 280px; 
+      pointer-events: none; box-shadow: 0 5px 20px rgba(0,0,0,0.8); 
+    }
+    .tt-title { color: #4cc9f0; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+    .tt-stat { color: #ffb703; font-weight: bold; margin-bottom: 5px; }
 
-    /* Components */
-    .pill { padding: 4px 8px; border-radius: 4px; border: 1px solid #4cc9f0; background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 10px; color: #4cc9f0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .clickable { cursor: pointer; pointer-events: auto; transition: all 0.2s; }
-    .clickable:hover { background: rgba(76, 201, 240, 0.2); transform: scale(1.02); }
-    .reset-btn { background: #ff4d6d; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    /* Interaction Components */
+    .pill { 
+      padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; 
+      background: rgba(76, 201, 240, 0.05); font-weight: bold; 
+      font-size: 10px; color: #4cc9f0; text-align: center; 
+      cursor: pointer; pointer-events: auto; transition: 0.2s;
+    }
+    .pill:hover { background: rgba(76, 201, 240, 0.2); }
     
-    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 10px; align-items: center; margin: 8px 0; }
+    .reset-btn { 
+      background: #ff4d6d; color: white; border: none; 
+      padding: 5px 15px; border-radius: 4px; font-weight: bold; 
+      cursor: pointer; pointer-events: auto; font-size: 10px;
+    }
+    .reset-btn:hover { background: #ff708d; }
+
+    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 12px; align-items: center; margin: 8px 0; }
     .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
     .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
+    
+    /* Pathology Colors on Nerves/Muscles */
     .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
     .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
     
-    #side-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 6000; align-items: center; justify-content: center; pointer-events: auto; }
+    #side-modal { 
+      display: none; position: fixed; inset: 0; 
+      background: rgba(0,0,0,0.85); z-index: 6000; 
+      align-items: center; justify-content: center; pointer-events: auto; 
+    }
+    .modal-box { 
+      background: #111; padding: 30px; border-radius: 15px; 
+      border: 1px solid #333; text-align: center; 
+    }
   </style>
 </head>
 <body>
-  <div id="loading">LOADING CLINICAL MODELS...</div>
+  <div id="loading">LOADING CLINICAL ASSETS...</div>
   <div id="tooltip"></div>
   <div id="app"></div>
 
   <div id="side-modal">
-    <div class="muscle-panel" style="width: 300px; text-align: center;">
-      <h3 id="modal-disease-name" style="color:#4cc9f0; font-size:14px; margin-top:0;">SELECT SIDE</h3>
-      <div style="display: flex; gap: 10px; justify-content: center; margin: 20px 0;">
-        <div class="pill clickable" id="btn-side-R" onclick="applyPathology('right')">RIGHT</div>
-        <div class="pill clickable" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
-        <div class="pill clickable" id="btn-side-L" onclick="applyPathology('left')">LEFT</div>
+    <div class="modal-box">
+      <h3 id="modal-disease-name" style="color:#4cc9f0; margin-top:0;">SELECT SIDE</h3>
+      <div style="display: flex; gap: 12px; justify-content: center; margin: 25px 0;">
+        <div class="pill" id="btn-side-R" onclick="applyPathology('right')">RIGHT (OD)</div>
+        <div class="pill" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
+        <div class="pill" id="btn-side-L" onclick="applyPathology('left')">LEFT (OS)</div>
       </div>
-      <div class="clickable" style="color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
+      <div style="cursor:pointer; color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
     </div>
   </div>
 
   <div id="hud-container">
     <div id="top-ribbon">
       <div class="pathology-grid" id="pathology-grid"></div>
+      
       <div class="cn-ribbon">
-        <button class="reset-btn" onclick="resetSystem()">RESET ALL</button>
+        <button class="reset-btn" onclick="resetSystem()">RESET EXAM</button>
         <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#aaa;">OD:</span>
-          <div class="pill clickable" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
-          <div class="pill clickable" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
-          <div class="pill clickable" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
+          <span style="font-size:10px; color:#888;">OD:</span>
+          <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
+          <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
+          <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
         </div>
-        <div style="width:1px; background:#333;"></div>
+        <div style="width:1px; background:#444;"></div>
         <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#aaa;">OS:</span>
-          <div class="pill clickable" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
-          <div class="pill clickable" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
-          <div class="pill clickable" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
+          <span style="font-size:10px; color:#888;">OS:</span>
+          <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
+          <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
+          <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
         </div>
       </div>
     </div>
