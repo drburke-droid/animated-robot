@@ -17,7 +17,7 @@ const PATHOLOGIES = {
   "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Down-and-out deviation with ptosis.", f: (side) => setNerve(side, 3, 0) },
   "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Superior oblique weakness causing hypertropia.", f: (side) => setNerve(side, 4, 0) },
   "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abduction deficit; esotropia in primary gaze.", f: (side) => setNerve(side, 6, 0) },
-  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "MLF lesion; adduction deficit on side of lesion.", f: (side) => {
+  "INO": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Lesion of MLF; adduction deficit on side of lesion.", f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
@@ -34,6 +34,7 @@ const PATHOLOGIES = {
 
 let activePathName = null;
 const tooltip = document.getElementById('tooltip');
+const diplopiaWarn = document.getElementById('diplopia-warning');
 
 function setNerve(side, num, val) {
   if(side === 'both') { SYSTEM_STATE.nerves['R-CN'+num] = val; SYSTEM_STATE.nerves['L-CN'+num] = val; }
@@ -105,8 +106,10 @@ function initUI() {
     grid.appendChild(btn);
   });
   document.getElementById("hud-container").style.opacity = "1";
+  document.getElementById("tiltSlider").oninput = (e) => APP_STATE.headTilt = THREE.MathUtils.degToRad(e.target.value);
 }
 
+// --- UPDATED CORE CLINICAL LOGIC (ABDUCTION LOCK) ---
 function getRecruitment(isRight, targetYaw, targetPitch) {
   const side = isRight ? 'right' : 'left';
   const prefix = isRight ? 'R-' : 'L-';
@@ -124,15 +127,20 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.25 + (1 - h.IR) * 0.25 + (h.SO < 1 ? 0.25 : 0);
 
-  // 2. MOTILITY COMMAND
-  // If moving nasally (adduction), health of MR is the only gate.
-  // If moving temporally (abduction), health of LR is the gate.
-  const mX = targetYaw > 0 ? targetYaw * h.MR : targetYaw * h.LR;
+  // 2. STRICT MOTILITY GATE (The "Abduction Lock")
+  let allowedYaw;
+  if (isRight) {
+    if (targetYaw < 0) allowedYaw = targetYaw * h.LR; // Right abduction
+    else allowedYaw = targetYaw * h.MR;               // Right adduction
+  } else {
+    if (targetYaw > 0) allowedYaw = targetYaw * h.LR; // Left abduction
+    else allowedYaw = targetYaw * h.MR;               // Left adduction
+  }
+
   const mY = targetPitch > 0 ? targetPitch * h.SR * 1.4 : targetPitch * h.IR * 1.2;
 
-  // 3. APPLY DRIFT AS OFFSET
-  // This ensures the eye adducts normally even if it's already "stuck" inward.
-  const finalYaw = mX + (isRight ? -driftX : driftX);
+  // 3. APPLY OFFSET
+  const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
   const finalPitch = mY + driftY;
 
   const abd = isRight ? -finalYaw : finalYaw;
@@ -191,6 +199,9 @@ function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
   if (APP_STATE.hasPointer) penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
+  if (model) model.rotation.z = APP_STATE.headTilt;
+
+  let eyeResults = [];
 
   [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
     if (!i.mesh) return;
@@ -202,7 +213,8 @@ function animate() {
 
     const res = getRecruitment(i.isR, yaw, pitch);
     i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
-    
+    eyeResults.push(res.rotation);
+
     MUSCLES.forEach(m => {
       const cache = uiCache[i.s][m];
       const valRaw = res.acts[m];
@@ -212,5 +224,18 @@ function animate() {
       cache.bar.style.background = valRaw < 0.05 ? "#ff4d6d" : (valRaw < 0.25 ? "#ffb703" : "#4cc9f0");
     });
   });
+
+  // --- DIPLOPIA INDICATOR CALCULATION ---
+  if(eyeResults.length === 2) {
+    const horizontalError = Math.abs(eyeResults[0].y - eyeResults[1].y);
+    const verticalError = Math.abs(eyeResults[0].x - eyeResults[1].x);
+    // Tolerance approx 0.05 rad (~3 degrees)
+    if (horizontalError > 0.05 || verticalError > 0.05) {
+      diplopiaWarn.style.display = 'block';
+    } else {
+      diplopiaWarn.style.display = 'none';
+    }
+  }
+
   renderer.render(scene, camera);
 }
