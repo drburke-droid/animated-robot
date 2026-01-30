@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Clinical Neuro-Ophthalmology Simulator</title>
+  <title>Clinical Neuro-Ophthalmology Simulator v2.0</title>
   <style>
     html, body { 
       margin: 0; height: 100%; overflow: hidden; 
@@ -14,79 +14,104 @@
     #loading { 
       position: fixed; inset: 0; background: #050505; 
       display: flex; align-items: center; justify-content: center; 
-      z-index: 1000; font-family: monospace; letter-spacing: 2px;
+      z-index: 2000; font-family: monospace; letter-spacing: 2px;
     }
     #hud-container { 
       position: fixed; inset: 0; pointer-events: none; 
       z-index: 10; opacity: 0; transition: opacity 1s ease; 
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 20px;
     }
+    #top-hud { align-self: center; display: flex; flex-direction: column; align-items: center; }
+    
     #side-hud { 
-      position: absolute; inset: 0; display: flex; 
-      justify-content: space-between; align-items: center; padding: 0 40px; 
+      display: flex; justify-content: space-between; align-items: center; 
+      width: 100%; position: absolute; top: 50%; left: 0; transform: translateY(-50%);
+      padding: 0 40px; box-sizing: border-box;
     }
-    #top-hud { 
-      position: absolute; top: 20px; left: 50%; 
-      transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
-    }
-    #bottom-hud {
-      position: absolute; bottom: 30px; left: 50%; 
-      transform: translateX(-50%); pointer-events: auto;
-    }
+
+    #bottom-hud { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
     .panel { 
-      background: rgba(10, 10, 10, 0.9); 
-      border: 1px solid rgba(255, 255, 255, 0.1); 
+      background: rgba(10, 10, 10, 0.92); 
+      border: 1px solid rgba(255, 255, 255, 0.15); 
       border-radius: 12px; padding: 25px; 
-      backdrop-filter: blur(15px); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      width: 580px;
+      backdrop-filter: blur(15px); box-shadow: 0 10px 30px rgba(0,0,0,0.8);
     }
+
+    .muscle-panel { width: 580px; }
+    .pathology-panel { width: 1000px; pointer-events: auto; }
+
     .panel-title { 
       color: #4cc9f0; font-weight: 900; margin-bottom: 15px; 
       font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px;
     }
-    .cn-container { display: flex; gap: 20px; }
-    .cn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-    .cn-row { display: flex; gap: 8px; }
+
+    .pathology-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
     .row { 
       display: grid; grid-template-columns: 50px 1fr 60px; 
       gap: 15px; align-items: center; margin: 12px 0; 
     }
+
     .clickable { pointer-events: auto; cursor: pointer; transition: all 0.2s ease; }
-    .clickable:hover { filter: brightness(1.3); }
+    .clickable:hover { background: rgba(76, 201, 240, 0.2); transform: translateY(-1px); }
+    
     .m-label { font-weight: bold; font-size: 14px; color: #4cc9f0; }
-    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
-    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
+    .paresis { color: #ffb703 !important; }
+    .paralysis { color: #ff4d6d !important; text-decoration: line-through; }
+
     .barWrap { height: 10px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; overflow: hidden; }
     .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
-    .pct { font-family: 'Courier New', Courier, monospace; font-size: 14px; text-align: right; color: #4cc9f0; }
+    .pct { font-family: monospace; font-size: 14px; text-align: right; color: #4cc9f0; }
+
     .pill { 
-      padding: 8px 16px; border-radius: 4px; border: 1px solid #4cc9f0; 
-      background: rgba(76, 201, 240, 0.1); font-weight: bold; font-size: 12px; 
-      color: #4cc9f0; text-align: center; min-width: 60px;
+      padding: 8px 12px; border-radius: 4px; border: 1px solid #4cc9f0; 
+      background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 11px; 
+      color: #4cc9f0; text-align: center;
     }
-    input[type=range] { width: 300px; cursor: pointer; }
-    .slider-label { text-align: center; font-size: 12px; font-weight: bold; color: #4cc9f0; margin-bottom: 5px; }
+
+    /* Modal Styling */
+    #side-modal { 
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); 
+      z-index: 3000; align-items: center; justify-content: center; pointer-events: auto;
+    }
+
+    input[type=range] { width: 300px; cursor: pointer; pointer-events: auto; }
   </style>
 </head>
 <body>
-  <div id="loading">CALIBRATING CLINICAL ENGINE...</div>
+  <div id="loading">SYNCHRONIZING PATHOLOGY DATABASE...</div>
   <div id="app"></div>
+
+  <div id="side-modal">
+    <div class="panel" style="width: 400px; text-align: center;">
+      <div class="panel-title" id="modal-disease-name">SELECT LATERALITY</div>
+      <div style="display: flex; gap: 10px; justify-content: center; margin: 20px 0;">
+        <div class="pill clickable" id="btn-side-R" onclick="applyPathology('right')">RIGHT</div>
+        <div class="pill clickable" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
+        <div class="pill clickable" id="btn-side-L" onclick="applyPathology('left')">LEFT</div>
+      </div>
+      <div class="clickable" style="color:#ff4d6d; font-size:12px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
+    </div>
+  </div>
+
   <div id="hud-container">
     <div id="top-hud">
-      <div class="panel" style="width: auto; min-width: 400px;">
-        <div class="cn-container">
-          <div class="cn-group">
-            <div class="m-label" style="margin-bottom:5px">RIGHT NERVES (OD)</div>
-            <div class="cn-row">
+      <div class="panel" style="width: auto; pointer-events: auto;">
+        <div style="display: flex; gap: 20px;">
+          <div class="cn-group" id="cn-group-R">
+            <div class="m-label" style="margin-bottom:5px; font-size:10px">RIGHT NERVES (OD)</div>
+            <div style="display:flex; gap:5px;">
               <div class="pill clickable" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
               <div class="pill clickable" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
               <div class="pill clickable" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
             </div>
           </div>
-          <div style="width:1px; background:rgba(255,255,255,0.1); align-self:stretch"></div>
-          <div class="cn-group">
-            <div class="m-label" style="margin-bottom:5px">LEFT NERVES (OS)</div>
-            <div class="cn-row">
+          <div class="cn-group" id="cn-group-L">
+            <div class="m-label" style="margin-bottom:5px; font-size:10px">LEFT NERVES (OS)</div>
+            <div style="display:flex; gap:5px;">
               <div class="pill clickable" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
               <div class="pill clickable" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
               <div class="pill clickable" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
@@ -95,15 +120,24 @@
         </div>
       </div>
     </div>
+
     <div id="side-hud">
-      <div class="panel" id="musclesR"></div> 
-      <div class="panel" id="musclesL"></div> 
+      <div class="panel muscle-panel" id="musclesR"></div> 
+      <div class="panel muscle-panel" id="musclesL"></div> 
     </div>
+
     <div id="bottom-hud">
-      <div class="slider-label">BIELSCHOWSKY HEAD TILT TEST</div>
-      <input type="range" id="tiltSlider" min="-30" max="30" value="0" step="1">
+      <div class="panel pathology-panel">
+        <div class="panel-title">Pathology Library</div>
+        <div class="pathology-grid" id="pathology-grid"></div>
+      </div>
+      <div style="pointer-events: auto; text-align: center;">
+        <div style="font-size: 10px; color: #4cc9f0; margin-bottom: 5px;">HEAD TILT (BIELSCHOWSKY)</div>
+        <input type="range" id="tiltSlider" min="-30" max="30" value="0">
+      </div>
     </div>
   </div>
+
   <script type="importmap">
     { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
   </script>
