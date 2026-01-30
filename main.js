@@ -5,14 +5,13 @@ const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
 const APP_STATE = { ready: false, hasPointer: false, currentActsL: null, currentActsR: null, zoom: 6.5 };
 const uiCache = { left: {}, right: {}, cn: {} };
 
-// --- 1. UI Initialization (Fixed Titles for Screen Sides) ---
 function initUI() {
   const containerHUD = document.getElementById("hud-container");
   if (!containerHUD) return false;
 
   const sides = [
-    { id: "musclesL", key: "left", label: "Left Eye (OS)" },  // Left screen side
-    { id: "musclesR", key: "right", label: "Right Eye (OD)" } // Right screen side
+    { id: "musclesL", key: "left", label: "Left Eye (OS)" },
+    { id: "musclesR", key: "right", label: "Right Eye (OD)" }
   ];
 
   sides.forEach(s => {
@@ -35,12 +34,14 @@ function initUI() {
   return true;
 }
 
-// --- 2. Anatomical Recruitment (The SO Mechanical Fix) ---
 function getRecruitment(isRight, yaw, pitch) {
   const tone = 0.20; 
   const range = 1.6; 
 
-  const abduction = isRight ? yaw : -yaw; 
+  // Anatomical Correction:
+  // If cursor is at screen-left (negative yaw), that is the model's RIGHT.
+  // Therefore, for the Right Eye, negative yaw = abduction.
+  const abduction = isRight ? -yaw : yaw; 
   const adduction = -abduction;
 
   const up = Math.max(0, pitch);
@@ -48,7 +49,6 @@ function getRecruitment(isRight, yaw, pitch) {
   const outVal = Math.max(0, abduction);
   const inVal = Math.max(0, adduction);
 
-  // Mechanical leverage scaling
   const rectiEff = 0.2 + (outVal * 0.8); 
   const oblEff = 0.2 + (inVal * 0.8);
 
@@ -62,7 +62,6 @@ function getRecruitment(isRight, yaw, pitch) {
   };
 }
 
-// --- 3. Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020202);
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -88,7 +87,6 @@ const gazePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -2.5);
 const targetVec = new THREE.Vector3();
 let model, eyeL, eyeR;
 
-// --- 4. Event Listeners ---
 window.addEventListener("pointermove", (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -110,15 +108,12 @@ window.addEventListener("resize", () => {
 
 initUI();
 
-// --- 5. Loader & Material Logic ---
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene;
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const scale = 1.8 / size.y;
   model.scale.setScalar(scale);
-
-  // Position: centered eyes
   model.position.y = -1.6; 
 
   model.traverse(o => {
@@ -147,7 +142,6 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   animate();
 });
 
-// --- 6. Animation Loop ---
 function animate() {
   if (!APP_STATE.ready) return;
   requestAnimationFrame(animate);
@@ -161,9 +155,9 @@ function animate() {
     penlight.position.copy(targetVec);
   }
 
-  // Data Pipe mapping: 
-  // eyeL (subject's left) maps to the 'left' HUD cache (screen left)
-  // eyeR (subject's right) maps to the 'right' HUD cache (screen right)
+  // Final Mapping Logic:
+  // eyeL (model left) -> side "left" (screen left box)
+  // eyeR (model right) -> side "right" (screen right box)
   const configs = [
     { mesh: eyeL, isRight: false, side: "left" }, 
     { mesh: eyeR, isRight: true, side: "right" }
