@@ -66,9 +66,12 @@ function initUI() {
   });
 }
 
+// --- CORE CLINICAL LOGIC ---
 function getRecruitment(isRight, targetYaw, targetPitch) {
   const side = isRight ? 'right' : 'left';
   const prefix = isRight ? 'R-' : 'L-';
+  
+  // FIXED MAPPING: CN6 only affects LR. CN3 affects MR, SR, IR, IO. CN4 affects SO.
   const health = {
     LR: SYSTEM_STATE.nerves[prefix+'CN6'] * SYSTEM_STATE.muscles[side].LR,
     MR: SYSTEM_STATE.nerves[prefix+'CN3'] * SYSTEM_STATE.muscles[side].MR,
@@ -78,25 +81,32 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // BIELSCHOWSKY TILT LOGIC (CN IV)
+  // Bielschowsky Tilt Effect (CN IV)
   let tiltDrift = 0;
   if (health.SO < 1) {
     const tiltDir = isRight ? -APP_STATE.headTilt : APP_STATE.headTilt;
-    if (tiltDir > 0) tiltDrift = tiltDir * (1.0 - health.SO) * 0.4;
+    if (tiltDir > 0) tiltDrift = tiltDir * (1.0 - health.SO) * 0.45;
   }
 
+  // Drift/Deviations
   let driftX = (1.0 - health.LR) * -0.45 + (1.0 - health.MR) * 0.45;
   let driftY = (1.0 - health.SR) * -0.3 + (1.0 - health.IR) * 0.3 + tiltDrift;
-  if (health.SO < 1) driftY += (1.0 - health.SO) * 0.2;
+  if (health.SO < 1) driftY += (1.0 - health.SO) * 0.25;
 
+  // Motility Limits
   const motilityX = targetYaw > 0 ? targetYaw * health.MR : targetYaw * health.LR;
   let motilityY;
   const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
-  if (targetPitch < 0) motilityY = isNasal ? targetPitch * health.SO : targetPitch * health.IR;
-  else motilityY = isNasal ? targetPitch * health.IO : targetPitch * health.SR;
+  
+  if (targetPitch < 0) {
+    motilityY = isNasal ? targetPitch * health.SO : targetPitch * health.IR;
+  } else {
+    motilityY = isNasal ? targetPitch * health.IO : targetPitch * health.SR;
+  }
 
   const finalYaw = motilityX + (isRight ? -driftX : driftX);
   const finalPitch = motilityY + driftY;
+  
   const abd = isRight ? -finalYaw : finalYaw;
   const add = -abd;
   const range = 1.6;
@@ -170,7 +180,6 @@ function animate() {
     raycaster.ray.intersectPlane(gazePlane, targetVec);
     penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
   }
-  // Apply visual head tilt
   if (model) model.rotation.z = APP_STATE.headTilt;
 
   [ {mesh: eyeL, isRight: false, side: "left"}, {mesh: eyeR, isRight: true, side: "right"} ].forEach(item => {
