@@ -2,171 +2,135 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Neuro-Ophthalmology Simulator - Dr. Robert Burke</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gaze Simulator - Dr. Robert Burke</title>
   <style>
+    * { box-sizing: border-box; }
     html, body { 
       margin: 0; height: 100%; overflow: hidden; 
       background: #000; color: #fff; 
       font-family: 'Segoe UI', Tahoma, sans-serif;
+      touch-action: none;
     }
-    #app { position: fixed; inset: 0; }
+    #app { position: fixed; inset: 0; z-index: 1; }
     
-    /* Dr. Burke Attribution Styling */
     #dr-credit {
-      position: fixed;
-      bottom: 15px;
-      right: 20px;
-      font-size: 13px;
-      color: rgba(76, 201, 240, 0.8);
-      font-weight: bold;
-      letter-spacing: 1px;
-      z-index: 2000;
-      pointer-events: none;
-      text-shadow: 0 0 5px #000;
+      position: fixed; bottom: 10px; right: 15px;
+      font-size: 10px; color: rgba(76, 201, 240, 0.6);
+      z-index: 100; pointer-events: none;
     }
 
-    #loading { 
-      position: fixed; inset: 0; background: #050505; 
-      display: flex; align-items: center; justify-content: center; 
-      z-index: 5000; font-family: monospace; 
-    }
-    
-    #hud-container { 
-      position: fixed; inset: 0; pointer-events: none; 
-      z-index: 10; display: flex; flex-direction: column; 
-      padding: 10px; opacity: 0; transition: opacity 1s ease;
-    }
-    
-    #top-ribbon { 
-      align-self: center; width: 98%; display: flex; 
-      flex-direction: column; gap: 5px; pointer-events: auto;
-    }
-    .pathology-grid { 
-      display: grid; grid-template-columns: repeat(8, 1fr); 
-      grid-auto-rows: min-content; gap: 4px; 
-      background: rgba(10,10,10,0.85); padding: 8px; 
-      border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
-    }
-    .cn-ribbon { 
-      display: flex; justify-content: center; gap: 25px; 
-      background: rgba(15,15,15,0.9); padding: 8px; 
-      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); 
+    /* Mobile HUD */
+    #mobile-hud {
+      position: fixed; top: 10px; left: 10px; right: 10px;
+      z-index: 1000; display: flex; flex-direction: column; gap: 8px;
+      pointer-events: auto;
     }
 
-    #side-hud { 
-      position: absolute; top: 55%; left: 0; width: 100%; 
-      transform: translateY(-50%); display: flex; 
-      justify-content: space-between; padding: 0 40px; box-sizing: border-box;
-    }
-    .muscle-panel { 
-      width: 480px; background: rgba(10, 10, 10, 0.85);
-      border-radius: 12px; padding: 18px; 
-      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);
+    .menu-btn {
+      background: rgba(20, 20, 20, 0.9); border: 1px solid #4cc9f0;
+      color: #4cc9f0; padding: 12px; border-radius: 8px;
+      font-weight: bold; text-align: center; font-size: 14px;
     }
 
-    #tooltip { 
-      position: fixed; display: none; background: #111; 
-      border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; 
-      z-index: 4000; font-size: 13px; line-height: 1.4; max-width: 320px;
-      pointer-events: none; box-shadow: 0 5px 20px rgba(0,0,0,0.8); 
+    .dropdown-content {
+      display: none; background: rgba(15, 15, 15, 0.95);
+      border-radius: 8px; border: 1px solid #333;
+      padding: 10px; max-height: 40vh; overflow-y: auto;
     }
-    .tt-title { color: #4cc9f0; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 3px; }
-    .tt-stat { color: #ffb703; font-weight: bold; margin-bottom: 5px; font-size: 11px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+
+    /* Muscle Panels - Positioned at bottom for mobile thumb access */
+    #side-hud {
+      position: fixed; bottom: 40px; left: 0; width: 100%;
+      display: flex; flex-direction: column; gap: 5px;
+      padding: 0 10px; pointer-events: none; z-index: 500;
+    }
+    .muscle-panel {
+      background: rgba(10, 10, 10, 0.8); padding: 8px;
+      border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);
+      pointer-events: auto; font-size: 10px;
+    }
 
     .pill { 
-      padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; 
+      padding: 10px 5px; border-radius: 4px; border: 1px solid #4cc9f0; 
       background: rgba(76, 201, 240, 0.05); font-weight: bold; 
-      font-size: 10px; color: #4cc9f0; text-align: center;
-      cursor: pointer; pointer-events: auto; transition: 0.2s;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: 11px; color: #4cc9f0; text-align: center;
     }
-    .pill:hover { background: rgba(76, 201, 240, 0.2); }
-    
-    .reset-btn { 
-      background: #ff4d6d; color: white; border: none; 
-      padding: 5px 15px; border-radius: 4px; font-weight: bold; 
-      cursor: pointer; pointer-events: auto; font-size: 10px;
-    }
-    .reset-btn:hover { background: #ff708d; }
 
-    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 12px; align-items: center; margin: 8px 0; }
-    .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
-    .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
-    
-    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; background: rgba(255, 183, 3, 0.15) !important; }
-    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; background: rgba(255, 77, 109, 0.15) !important; text-decoration: line-through; }
-    
-    #side-modal { 
-      display: none; position: fixed; inset: 0; 
-      background: rgba(0,0,0,0.85); z-index: 6000; 
-      align-items: center; justify-content: center; pointer-events: auto;
+    /* Target Dot */
+    #gaze-dot {
+      position: absolute; width: 24px; height: 24px;
+      background: rgba(255, 0, 0, 0.6); border: 2px solid white;
+      border-radius: 50%; pointer-events: none; z-index: 2000;
+      display: none; transform: translate(-50%, -50%);
     }
-    .modal-box { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; text-align: center; }
 
-    #bottom-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); pointer-events: auto; text-align: center; }
-    input[type=range] { width: 300px; cursor: pointer; }
+    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
+    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
+    
+    .row { display: grid; grid-template-columns: 30px 1fr 30px; gap: 5px; align-items: center; }
+    .barWrap { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+    .bar { height: 100%; width: 0%; background: #4cc9f0; }
   </style>
 </head>
 <body>
-  <div id="loading">SYNCHRONIZING PATHOLOGY DATABASE...</div>
-  <div id="tooltip"></div>
-  <div id="app"></div>
-  
   <div id="dr-credit">Developed by Dr. Robert Burke</div>
+  <div id="app"></div>
+  <div id="gaze-dot"></div>
 
-  <div id="side-modal">
-    <div class="modal-box">
-      <h3 id="modal-disease-name" style="color:#4cc9f0; margin-top:0;">SELECT LATERALITY</h3>
-      <div style="display: flex; gap: 12px; justify-content: center; margin: 25px 0;">
-        <div class="pill" id="btn-side-R" onclick="applyPathology('right')">RIGHT (OD)</div>
-        <div class="pill" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
-        <div class="pill" id="btn-side-L" onclick="applyPathology('left')">LEFT (OS)</div>
+  <div id="mobile-hud">
+    <div class="menu-btn" onclick="toggleMenu('path-menu')">SELECT PATHOLOGY ▼</div>
+    <div id="path-menu" class="dropdown-content">
+        <div id="pathology-grid" class="grid-2"></div>
+    </div>
+
+    <div class="menu-btn" onclick="toggleMenu('cn-menu')">CRANIAL NERVES ▼</div>
+    <div id="cn-menu" class="dropdown-content">
+      <button class="menu-btn" style="width:100%; margin-bottom:10px; background:#ff4d6d; color:#fff;" onclick="resetSystem()">RESET ALL</button>
+      <div style="font-size:11px; margin-bottom:5px;">OD (Right)</div>
+      <div class="grid-3">
+        <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
+        <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
+        <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
       </div>
-      <div style="cursor:pointer; color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
+      <div style="font-size:11px; margin:10px 0 5px;">OS (Left)</div>
+      <div class="grid-3">
+        <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
+        <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
+        <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
+      </div>
     </div>
   </div>
 
-  <div id="hud-container">
-    <div id="top-ribbon">
-      <div class="pathology-grid" id="pathology-grid"></div>
-      <div class="cn-ribbon">
-        <button class="reset-btn" onclick="resetSystem()">RESET ALL SELECTIONS</button>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#888;">OD:</span>
-          <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
-          <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
-          <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
-        </div>
-        <div style="width:1px; background:#444;"></div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#888;">OS:</span>
-          <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
-          <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
-          <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
-        </div>
+  <div id="side-hud">
+    <div class="muscle-panel" id="musclesR"></div>
+    <div class="muscle-panel" id="musclesL"></div>
+  </div>
+
+  <div id="side-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#111; padding:20px; border-radius:15px; text-align:center; border:1px solid #4cc9f0;">
+      <h3 id="modal-disease-name" style="color:#4cc9f0;">LATERALITY</h3>
+      <div style="display:flex; gap:10px; margin:20px 0;">
+        <div class="pill" style="flex:1" onclick="applyPathology('right')">RIGHT</div>
+        <div class="pill" style="flex:1" onclick="applyPathology('both')">BOTH</div>
+        <div class="pill" style="flex:1" onclick="applyPathology('left')">LEFT</div>
       </div>
-    </div>
-
-    <div id="side-hud">
-      <div class="muscle-panel" id="musclesR"></div>
-      <div class="muscle-panel" id="musclesL"></div>
-    </div>
-
-    <div id="bottom-controls">
-      <div style="font-size: 10px; color: #4cc9f0; font-weight: bold; margin-bottom: 5px;">BIELSCHOWSKY HEAD TILT TEST</div>
-      <input type="range" id="tiltSlider" min="-30" max="30" value="0">
+      <div style="color:#ff4d6d; font-weight:bold;" onclick="document.getElementById('side-modal').style.display='none'">CANCEL</div>
     </div>
   </div>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-      }
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+  <script type="module" src="./main.js"></script>
+  <script>
+    window.toggleMenu = (id) => {
+      const el = document.getElementById(id);
+      const isVisible = el.style.display === 'block';
+      document.querySelectorAll('.dropdown-content').forEach(d => d.style.display = 'none');
+      el.style.display = isVisible ? 'none' : 'block';
     }
   </script>
-  <script type="module" src="./main.js"></script>
 </body>
 </html>
