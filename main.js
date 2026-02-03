@@ -127,7 +127,11 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
   }
 
   const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
-  const mY = targetPitch > 0 ? (isNasal ? targetPitch * h.IO : targetPitch * h.SR) : (isNasal ? targetPitch * h.SO : targetPitch * h.IR);
+  
+  // Refined vertical responsiveness for inferior gaze
+  const mY = targetPitch > 0 ? 
+    (isNasal ? targetPitch * h.IO : targetPitch * h.SR * 1.4) : 
+    (isNasal ? targetPitch * h.SO : targetPitch * h.IR * 1.6);
 
   const fYaw = allowedYaw + (isRight ? -driftX : driftX);
   const fPit = mY + driftY;
@@ -140,9 +144,9 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
       LR: (0.2 + Math.max(0, abd) * 1.8) * h.LR,
       MR: (0.2 + Math.max(0, add) * 1.8) * h.MR,
       SR: (0.2 + Math.max(0, fPit) * 2.2) * h.SR,
-      IR: (0.2 + Math.max(0, -fPit) * 1.8) * h.IR,
+      IR: (0.2 + Math.max(0, -fPit) * 2.0) * h.IR,
       IO: (0.2 + Math.max(0, fPit) * 2.0) * h.IO,
-      SO: (0.2 + Math.max(0, -fPit) * 1.8) * h.SO
+      SO: (0.2 + Math.max(0, -fPit) * 2.0) * h.SO
     }
   };
 }
@@ -179,7 +183,8 @@ window.addEventListener("touchmove", (e) => {
 initUI();
 
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
-  model = gltf.scene; model.position.y = -1.6;
+  model = gltf.scene; 
+  model.position.y = -0.6; // Raised position
   model.scale.setScalar(1.8 / new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y);
   model.traverse(o => {
     if (o.name === "Eye_L") eyeL = o; if (o.name === "Eye_R") eyeR = o;
