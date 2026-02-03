@@ -2,6 +2,137 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Neuro-Ophthalmology Simulator</title>
+  <style>
+    html, body { 
+      margin: 0; height: 100%; overflow: hidden; 
+      background: #000; color: #fff; 
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      touch-action: none; /* Prevents scrolling while simulating gaze */
+    }
+    #app { position: fixed; inset: 0; }
+    
+    #dr-credit {
+      position: fixed; bottom: 10px; right: 15px;
+      font-size: 11px; color: rgba(76, 201, 240, 0.6);
+      letter-spacing: 1px; z-index: 100;
+    }
+
+    #hud-container { 
+      position: fixed; inset: 0; pointer-events: none; 
+      z-index: 10; display: flex; flex-direction: column; 
+      padding: 10px; opacity: 0; transition: opacity 1s ease; 
+    }
+    
+    #top-ribbon { 
+      align-self: center; width: 98%; display: flex; 
+      flex-direction: column; gap: 5px; pointer-events: auto; 
+    }
+    .pathology-grid { 
+      display: grid; grid-template-columns: repeat(8, 1fr); 
+      gap: 3px; background: rgba(10,10,10,0.85); 
+      padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); 
+    }
+    .cn-ribbon { 
+      display: flex; justify-content: center; gap: 15px; 
+      background: rgba(15,15,15,0.9); padding: 8px; 
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); 
+    }
+
+    #side-hud { 
+      position: absolute; top: 55%; left: 0; width: 100%; 
+      transform: translateY(-50%); display: flex; 
+      justify-content: space-between; padding: 0 20px; box-sizing: border-box; 
+    }
+    .muscle-panel { 
+      width: 420px; background: rgba(10, 10, 10, 0.85); 
+      border-radius: 12px; padding: 15px; 
+      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); 
+    }
+
+    /* --- MOBILE RESPONSIVENESS --- */
+    @media (max-width: 1024px) {
+      .pathology-grid { grid-template-columns: repeat(4, 1fr); }
+      .muscle-panel { width: 45%; font-size: 12px; }
+    }
+
+    @media (max-width: 600px) {
+      #top-ribbon { width: 100%; }
+      .pathology-grid { grid-template-columns: repeat(3, 1fr); max-height: 120px; overflow-y: auto; }
+      .cn-ribbon { flex-wrap: wrap; gap: 10px; }
+      #side-hud { 
+        position: relative; top: auto; transform: none; 
+        flex-direction: column; align-items: center; margin-top: 10px; gap: 10px;
+      }
+      .muscle-panel { width: 95%; padding: 10px; }
+      .row { margin: 4px 0; }
+    }
+
+    /* Rest of the styles (pills, bars, tooltips) remain the same */
+    .pill { padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 10px; color: #4cc9f0; text-align: center; cursor: pointer; pointer-events: auto; }
+    .reset-btn { background: #ff4d6d; color: white; border: none; padding: 5px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; pointer-events: auto; font-size: 10px; }
+    .row { display: grid; grid-template-columns: 40px 1fr 40px; gap: 8px; align-items: center; }
+    .barWrap { height: 6px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
+    .bar { height: 100%; background: #4cc9f0; transition: width 0.1s ease-out; }
+    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
+    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
+    #tooltip { position: fixed; display: none; background: #111; border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; z-index: 4000; font-size: 13px; max-width: 280px; pointer-events: none; }
+    #side-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 6000; align-items: center; justify-content: center; pointer-events: auto; }
+    .modal-box { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="dr-credit">Developed by Dr. Robert Burke</div>
+  <div id="app"></div>
+  <div id="tooltip"></div>
+  <div id="side-modal">
+    <div class="modal-box">
+      <h3 id="modal-disease-name" style="color:#4cc9f0; margin-top:0;">SELECT LATERALITY</h3>
+      <div style="display: flex; gap: 12px; justify-content: center; margin: 25px 0;">
+        <div class="pill" id="btn-side-R" onclick="applyPathology('right')">RIGHT</div>
+        <div class="pill" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div>
+        <div class="pill" id="btn-side-L" onclick="applyPathology('left')">LEFT</div>
+      </div>
+      <div style="cursor:pointer; color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div>
+    </div>
+  </div>
+
+  <div id="hud-container">
+    <div id="top-ribbon">
+      <div class="pathology-grid" id="pathology-grid"></div>
+      <div class="cn-ribbon">
+        <button class="reset-btn" onclick="resetSystem()">RESET ALL</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span style="font-size:10px; color:#888;">OD:</span>
+          <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
+          <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
+          <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span style="font-size:10px; color:#888;">OS:</span>
+          <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
+          <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
+          <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
+        </div>
+      </div>
+    </div>
+    <div id="side-hud">
+      <div class="muscle-panel" id="musclesR"></div>
+      <div class="muscle-panel" id="musclesL"></div>
+    </div>
+  </div>
+
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
+
+
+/*<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Neuro-Ophthalmology Simulator v3.4</title>
   <style>
@@ -167,3 +298,4 @@
   <script type="module" src="./main.js"></script>
 </body>
 </html>
+*/
