@@ -145,7 +145,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // Basal Tone & Drift: Unopposed SO and LR pull Down and Out in CN3 Palsy
+  // BASAL TONE THEORY: Unopposed SO and LR pull eye Down and Out in CN III palsy [cite: 35, 36, 43]
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.1 + (1 - h.IR) * 0.1 + (h.SR === 0 && h.IR === 0 ? -0.25 : 0);
 
@@ -153,6 +153,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) :
     (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
 
+  // Anatomical scaling: SO depression is primary in adduction [cite: 40, 42]
   const nasalYaw = isRight ? targetYaw : -targetYaw;
   const nasalFactor = THREE.MathUtils.clamp((nasalYaw + 0.5) / 1.0, 0, 1);
 
@@ -202,7 +203,7 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// Initialization fix for loading screens
+// Initialization fix for loading screens [cite: 49, 50]
 window.addEventListener("load", () => {
   initUI();
 });
