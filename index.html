@@ -8,16 +8,16 @@
     html, body { 
       margin: 0; height: 100%; overflow: hidden; 
       background: #000; color: #fff; 
-      font-family: 'Segoe UI', Tahoma, sans-serif;
+      font-family: 'Segoe UI', Tahoma, sans-serif; [cite: 54, 55]
     }
-    #app { position: fixed; inset: 0; }
+    #app { position: fixed; inset: 0; } [cite: 56]
     #loading { 
       position: fixed; inset: 0; background: #050505; 
       display: flex; align-items: center; justify-content: center; 
-      z-index: 5000; font-family: monospace; 
+      z-index: 5000; font-family: monospace; [cite: 57, 58]
     }
     
-    /* Attribution Label */
+    /* Attribution Styling */
     #dr-credit {
       position: fixed;
       bottom: 15px;
@@ -34,131 +34,131 @@
     #hud-container { 
       position: fixed; inset: 0; pointer-events: none; 
       z-index: 10; display: flex; flex-direction: column; 
-      padding: 10px; opacity: 0; transition: opacity 1s ease;
+      padding: 10px; opacity: 0; transition: opacity 1s ease; [cite: 59]
     }
     
     #top-ribbon { 
       align-self: center; width: 98%; display: flex; 
-      flex-direction: column; gap: 5px; pointer-events: auto;
+      flex-direction: column; gap: 5px; pointer-events: auto; [cite: 60, 61]
     }
     .pathology-grid { 
       display: grid; grid-template-columns: repeat(8, 1fr); 
       grid-auto-rows: min-content; gap: 4px; 
-      background: rgba(10,10,10,0.85); padding: 8px; 
-      border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(10,10,10,0.85); [cite: 62, 63]
+      padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); [cite: 63]
     }
     .cn-ribbon { 
       display: flex; justify-content: center; gap: 25px; 
-      background: rgba(15,15,15,0.9); padding: 8px; 
-      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); 
+      background: rgba(15,15,15,0.9); padding: 8px; [cite: 64, 65]
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); [cite: 65]
     }
 
     #side-hud { 
       position: absolute; top: 55%; left: 0; width: 100%; 
       transform: translateY(-50%); display: flex; 
-      justify-content: space-between; padding: 0 40px; box-sizing: border-box;
+      justify-content: space-between; padding: 0 40px; box-sizing: border-box; [cite: 66]
     }
     .muscle-panel { 
-      width: 480px; background: rgba(10, 10, 10, 0.85);
-      border-radius: 12px; padding: 18px; 
-      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);
+      width: 480px; background: rgba(10, 10, 10, 0.85); [cite: 67]
+      border-radius: 12px; padding: 18px; [cite: 68]
+      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); [cite: 68]
     }
 
     #tooltip { 
-      position: fixed; display: none; background: #111; 
-      border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; 
-      z-index: 4000; font-size: 13px; line-height: 1.4; max-width: 320px;
-      pointer-events: none; box-shadow: 0 5px 20px rgba(0,0,0,0.8); 
+      position: fixed; display: none; background: #111; [cite: 69, 70]
+      border: 1px solid #4cc9f0; padding: 12px; border-radius: 6px; [cite: 70]
+      z-index: 4000; font-size: 13px; line-height: 1.4; max-width: 320px; [cite: 70]
+      pointer-events: none; box-shadow: 0 5px 20px rgba(0,0,0,0.8); [cite: 71]
     }
-    .tt-title { color: #4cc9f0; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 3px; }
-    .tt-stat { color: #ffb703; font-weight: bold; margin-bottom: 5px; font-size: 11px; }
+    .tt-title { color: #4cc9f0; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 3px; } [cite: 71, 72]
+    .tt-stat { color: #ffb703; font-weight: bold; margin-bottom: 5px; font-size: 11px; } [cite: 72, 73]
 
     .pill { 
-      padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; 
-      background: rgba(76, 201, 240, 0.05); font-weight: bold; 
-      font-size: 10px; color: #4cc9f0; text-align: center;
-      cursor: pointer; pointer-events: auto; transition: 0.2s;
+      padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; [cite: 73, 74]
+      background: rgba(76, 201, 240, 0.05); font-weight: bold; [cite: 74]
+      font-size: 10px; color: #4cc9f0; text-align: center; [cite: 74]
+      cursor: pointer; pointer-events: auto; transition: 0.2s; [cite: 75]
     }
-    .pill:hover { background: rgba(76, 201, 240, 0.2); }
+    .pill:hover { background: rgba(76, 201, 240, 0.2); } [cite: 76]
     
     .reset-btn { 
-      background: #ff4d6d; color: white; border: none; 
-      padding: 5px 15px; border-radius: 4px; font-weight: bold; 
-      cursor: pointer; pointer-events: auto; font-size: 10px;
+      background: #ff4d6d; color: white; border: none; [cite: 77, 78]
+      padding: 5px 15px; border-radius: 4px; font-weight: bold; [cite: 78]
+      cursor: pointer; pointer-events: auto; font-size: 10px; [cite: 78]
     }
-    .reset-btn:hover { background: #ff708d; }
+    .reset-btn:hover { background: #ff708d; } [cite: 79]
 
-    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 12px; align-items: center; margin: 8px 0; }
-    .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
-    .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
+    .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 12px; align-items: center; margin: 8px 0; } [cite: 79, 80]
+    .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; } [cite: 80, 81]
+    .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; } [cite: 81, 82]
     
-    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; background: rgba(255, 183, 3, 0.15) !important; }
-    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; background: rgba(255, 77, 109, 0.15) !important; text-decoration: line-through; }
+    .paresis { color: #ffb703 !important; border-color: #ffb703 !important; background: rgba(255, 183, 3, 0.15) !important; } [cite: 82, 83]
+    .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; background: rgba(255, 77, 109, 0.15) !important; text-decoration: line-through; } [cite: 83, 84]
     
     #side-modal { 
-      display: none; position: fixed; inset: 0; 
-      background: rgba(0,0,0,0.85); z-index: 6000; 
-      align-items: center; justify-content: center; pointer-events: auto;
+      display: none; position: fixed; inset: 0; [cite: 85, 86]
+      background: rgba(0,0,0,0.85); z-index: 6000; [cite: 86]
+      align-items: center; justify-content: center; pointer-events: auto; [cite: 86]
     }
-    .modal-box { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; text-align: center; }
+    .modal-box { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; text-align: center; } [cite: 87, 88]
 
-    #bottom-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); pointer-events: auto; text-align: center; }
-    input[type=range] { width: 300px; cursor: pointer; }
+    #bottom-controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); pointer-events: auto; text-align: center; } [cite: 88, 89]
+    input[type=range] { width: 300px; cursor: pointer; } [cite: 89, 90]
   </style>
 </head>
 <body>
-  <div id="loading">SYNCHRONIZING PATHOLOGY DATABASE...</div>
-  <div id="tooltip"></div>
-  <div id="app"></div>
+  <div id="loading">SYNCHRONIZING PATHOLOGY DATABASE...</div> [cite: 90]
+  <div id="tooltip"></div> [cite: 90]
+  <div id="app"></div> [cite: 90]
   
   <div id="dr-credit">Developed by Dr. Robert Burke</div>
 
   <div id="side-modal">
     <div class="modal-box">
-      <h3 id="modal-disease-name" style="color:#4cc9f0; margin-top:0;">SELECT LATERALITY</h3>
-      <div style="display: flex; gap: 12px; justify-content: center; margin: 25px 0;">
-        <div class="pill" id="btn-side-R" onclick="applyPathology('right')">RIGHT (OD) [cite: 90]</div>
-        <div class="pill" id="btn-side-B" onclick="applyPathology('both')">BILATERAL [cite: 90]</div>
-        <div class="pill" id="btn-side-L" onclick="applyPathology('left')">LEFT (OS) [cite: 90]</div>
+      <h3 id="modal-disease-name" style="color:#4cc9f0; margin-top:0;">SELECT LATERALITY</h3> [cite: 90]
+      <div style="display: flex; gap: 12px; justify-content: center; margin: 25px 0;"> [cite: 90]
+        <div class="pill" id="btn-side-R" onclick="applyPathology('right')">RIGHT (OD)</div> [cite: 90]
+        <div class="pill" id="btn-side-B" onclick="applyPathology('both')">BILATERAL</div> [cite: 90]
+        <div class="pill" id="btn-side-L" onclick="applyPathology('left')">LEFT (OS)</div> [cite: 90]
       </div>
-      <div style="cursor:pointer; color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL [cite: 91]</div>
+      <div style="cursor:pointer; color:#ff4d6d; font-size:11px; font-weight:bold;" onclick="closeModal()">CANCEL</div> [cite: 90, 91]
     </div>
   </div>
 
   <div id="hud-container">
     <div id="top-ribbon">
-      <div class="pathology-grid" id="pathology-grid"></div>
+      <div class="pathology-grid" id="pathology-grid"></div> [cite: 91]
       
       <div class="cn-ribbon">
-        <button class="reset-btn" onclick="resetSystem()">RESET ALL SELECTIONS</button>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#888;">OD:</span>
-          <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
-          <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div>
-          <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div>
+        <button class="reset-btn" onclick="resetSystem()">RESET ALL SELECTIONS</button> [cite: 91]
+        <div style="display:flex; gap:10px; align-items:center;"> [cite: 91]
+          <span style="font-size:10px; color:#888;">OD:</span> [cite: 91]
+          <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div> [cite: 91]
+          <div class="pill" id="R-CN4" onclick="toggleState('R-CN4')">CN IV</div> [cite: 91]
+          <div class="pill" id="R-CN6" onclick="toggleState('R-CN6')">CN VI</div> [cite: 91, 92]
         </div>
-        <div style="width:1px; background:#444;"></div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <span style="font-size:10px; color:#888;">OS:</span>
-          <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div>
-          <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div>
-          <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div>
+        <div style="width:1px; background:#444;"></div> [cite: 92]
+        <div style="display:flex; gap:10px; align-items:center;"> [cite: 92]
+          <span style="font-size:10px; color:#888;">OS:</span> [cite: 92]
+          <div class="pill" id="L-CN3" onclick="toggleState('L-CN3')">CN III</div> [cite: 92]
+          <div class="pill" id="L-CN4" onclick="toggleState('L-CN4')">CN IV</div> [cite: 92]
+          <div class="pill" id="L-CN6" onclick="toggleState('L-CN6')">CN VI</div> [cite: 92, 93]
         </div>
       </div>
     </div>
 
     <div id="side-hud">
-      <div class="muscle-panel" id="musclesR"></div>
-      <div class="muscle-panel" id="musclesL"></div>
+      <div class="muscle-panel" id="musclesR"></div> [cite: 93]
+      <div class="muscle-panel" id="musclesL"></div> [cite: 93]
     </div>
 
     <div id="bottom-controls">
-      <div style="font-size: 10px; color: #4cc9f0; font-weight: bold; margin-bottom: 5px;">BIELSCHOWSKY HEAD TILT TEST [cite: 94]</div>
-      <input type="range" id="tiltSlider" min="-30" max="30" value="0">
+      <div style="font-size: 10px; color: #4cc9f0; font-weight: bold; margin-bottom: 5px;">BIELSCHOWSKY HEAD TILT TEST</div> [cite: 93, 94]
+      <input type="range" id="tiltSlider" min="-30" max="30" value="0"> [cite: 94]
     </div>
   </div>
 
-  <script type="importmap">
+  <script type="importmap"> [cite: 94]
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
