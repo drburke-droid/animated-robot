@@ -14,27 +14,25 @@ const SYSTEM_STATE = {
 };
 
 const PATHOLOGIES = {
-  "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Oculomotor nerve palsy. Causes a 'down-and-out' eye position, ptosis (eyelid droop), and potentially a dilated pupil.", f: (side) => setNerve(side, 3, 0) },
-  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Trochlear nerve palsy affecting the Superior Oblique muscle. Causes vertical double vision and an upward drift (hypertropia).", f: (side) => setNerve(side, 4, 0) },
-  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abducens nerve palsy. Blocks outward movement (abduction) and causes the eye to drift inward (esotropia).", f: (side) => setNerve(side, 6, 0) },
-  "INO (MLF)": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Internuclear Ophthalmoplegia. Damage to the Medial Longitudinal Fasciculus (MLF). The eye on the side of the lesion cannot turn inward (adduct) during horizontal gaze.", f: (side) => {
+  "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Oculomotor nerve palsy. Causes a 'down-and-out' eye position.", f: (side) => setNerve(side, 3, 0) },
+  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Trochlear nerve palsy affecting the SO.", f: (side) => setNerve(side, 4, 0) },
+  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abducens nerve palsy. Blocks abduction.", f: (side) => setNerve(side, 6, 0) },
+  "INO (MLF)": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Internuclear Ophthalmoplegia.", f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. Muscle swelling; restricts IR and MR first.", f: (side) => {
+  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
     t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
-  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; prevents elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
-  "Miller Fisher": { s: ['B'], prev: "0.05", desc: "GBS variant causing symmetrical eye paralysis.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
-  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "PICA stroke. Causes skew deviation and Horner's syndrome.", f: (side) => { 
+  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture trapping the IR muscle.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
+  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
+  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
+  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "PICA stroke skew deviation.", f: (side) => { 
     const isR = side === 'right';
     SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
   }}
 };
-
-let activePathName = null;
-const tooltip = document.getElementById('tooltip');
 
 function setNerve(side, num, val) {
   if(side === 'both') { SYSTEM_STATE.nerves['R-CN'+num] = val; SYSTEM_STATE.nerves['L-CN'+num] = val; }
@@ -119,32 +117,34 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // BASAL TONE: Eye drifts Down and Out if CN3 is paralyzed
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.1 + (1 - h.IR) * 0.1 + (h.SR === 0 && h.IR === 0 ? -0.25 : 0);
 
-  let allowedYaw = isRight ? 
-    (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) :
-    (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
+  let allowedYaw = isRight ? (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) : (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
 
-  const nasalFactor = THREE.MathUtils.clamp(((isRight ? targetYaw : -targetYaw) + 0.5), 0, 1);
+  // --- SMOOTHING FIX: Sigmoid Blending for SO vs IR ---
+  const nasalYaw = isRight ? targetYaw : -targetYaw;
+  const blend = 1 / (1 + Math.exp(-(nasalYaw + 0.2) * 8)); // 0 = Temporal(IR), 1 = Nasal(SO)
 
-  let allowedPitch = targetPitch > 0 ? 
-    (nasalFactor > 0.5 ? targetPitch * h.IO : targetPitch * h.SR) : 
-    (nasalFactor > 0.5 ? targetPitch * h.SO : targetPitch * h.IR);
+  let verticalCommand;
+  if (targetPitch > 0) { // Up
+    verticalCommand = THREE.MathUtils.lerp(targetPitch * h.SR, targetPitch * h.IO, blend);
+  } else { // Down (Boosted responsiveness with 2.2 multiplier)
+    verticalCommand = THREE.MathUtils.lerp(targetPitch * h.IR * 2.2, targetPitch * h.SO * 2.2, blend);
+  }
 
-  const fYaw = allowedYaw + (isRight ? -driftX : driftX);
-  const fPit = allowedPitch + driftY;
+  const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
+  const finalPitch = verticalCommand + driftY;
 
   return {
-    rotation: { y: fYaw, x: fPit },
+    rotation: { y: finalYaw, x: finalPitch },
     acts: {
-      LR: (0.2 + Math.max(0, isRight ? -fYaw : fYaw) * 1.8) * h.LR,
-      MR: (0.2 + Math.max(0, isRight ? fYaw : -fYaw) * 1.8) * h.MR,
-      SR: (0.2 + Math.max(0, fPit) * 2.2 * (1 - nasalFactor)) * h.SR,
-      IR: (0.2 + Math.max(0, -fPit) * 1.8 * (1 - nasalFactor)) * h.IR,
-      IO: (0.2 + Math.max(0, fPit) * 2.0 * nasalFactor) * h.IO,
-      SO: (0.2 + Math.max(0, -fPit) * 1.8 * nasalFactor + (h.IR === 0 ? 0.3 : 0)) * h.SO
+      LR: (0.2 + Math.max(0, isRight ? -finalYaw : finalYaw) * 1.8) * h.LR,
+      MR: (0.2 + Math.max(0, isRight ? finalYaw : -finalYaw) * 1.8) * h.MR,
+      SR: (0.2 + Math.max(0, finalPitch) * 2.2 * (1 - blend)) * h.SR,
+      IR: (0.2 + Math.max(0, -finalPitch) * 1.8 * (1 - blend)) * h.IR,
+      IO: (0.2 + Math.max(0, finalPitch) * 2.0 * blend) * h.IO,
+      SO: (0.2 + Math.max(0, -finalPitch) * 1.8 * blend + (h.IR === 0 ? 0.3 : 0)) * h.SO
     }
   };
 }
@@ -177,7 +177,8 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   });
   scene.add(model);
   
-  initUI();
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initUI); } else { initUI(); }
+  
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
 
