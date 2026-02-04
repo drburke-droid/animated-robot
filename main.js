@@ -21,18 +21,15 @@ const PATHOLOGIES = {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. An autoimmune swelling of the muscles. Typically restricts the IR and MR first.", f: (side) => {
+  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. Muscle swelling; restricts IR and MR first.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
     t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
-  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture trapping the IR muscle.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
   "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; prevents elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
-  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis. Fluctuating NMJ fatigue.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
   "Miller Fisher": { s: ['B'], prev: "0.05", desc: "GBS variant causing symmetrical eye paralysis.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
   "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "PICA stroke. Causes skew deviation and Horner's syndrome.", f: (side) => { 
     const isR = side === 'right';
-    SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; 
-    SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
+    SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
   }}
 };
 
@@ -84,8 +81,7 @@ function updateUIStyles() {
 function initUI() {
   const sides = [{ id: "musclesR", key: "right", label: "Right Eye (OD)" }, { id: "musclesL", key: "left", label: "Left Eye (OS)" }];
   sides.forEach(s => {
-    const el = document.getElementById(s.id);
-    if (!el) return;
+    const el = document.getElementById(s.id); if(!el) return;
     el.innerHTML = `<div style="color:#4cc9f0; font-size:12px; font-weight:900; margin-bottom:10px;">${s.label}</div>`;
     MUSCLES.forEach(m => {
       const row = document.createElement("div"); row.className = "row";
@@ -95,8 +91,7 @@ function initUI() {
     });
   });
 
-  const grid = document.getElementById('pathology-grid');
-  if (!grid) return;
+  const grid = document.getElementById('pathology-grid'); if(!grid) return;
   Object.keys(PATHOLOGIES).forEach(name => {
     const btn = document.createElement('div'); btn.className = 'pill clickable'; btn.innerText = name;
     btn.onclick = () => {
@@ -124,7 +119,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // BASAL TONE: Unopposed SO and LR pull Down and Out in complete CN III palsy
+  // BASAL TONE: Eye drifts Down and Out if CN3 is paralyzed
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.1 + (1 - h.IR) * 0.1 + (h.SR === 0 && h.IR === 0 ? -0.25 : 0);
 
@@ -164,12 +159,11 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0, 0.5));
 const penlight = new THREE.PointLight(0xffffff, 80, 10);
 scene.add(penlight);
 
+const targetVec = new THREE.Vector3();
 window.addEventListener("pointermove", (e) => {
   const m = { x: (e.clientX/window.innerWidth)*2-1, y: -(e.clientY/window.innerHeight)*2+1 };
   const r = new THREE.Raycaster(); r.setFromCamera(m, camera);
-  const targetVec = new THREE.Vector3();
   r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), -2.5), targetVec);
-  APP_STATE.target = targetVec;
   APP_STATE.hasPointer = true;
 });
 
@@ -183,23 +177,19 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   });
   scene.add(model);
   
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initUI);
-  } else {
-    initUI();
-  }
-  
+  initUI();
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
 
   function animate() {
     requestAnimationFrame(animate);
     if (!APP_STATE.ready || !APP_STATE.hasPointer) return;
-    penlight.position.set(APP_STATE.target.x, APP_STATE.target.y, APP_STATE.target.z + 0.6);
-    
+    penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
+    if (model) model.rotation.z = APP_STATE.headTilt;
+
     [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
       const eyePos = new THREE.Vector3(); i.mesh.getWorldPosition(eyePos);
-      const res = getRecruitment(i.isR, Math.atan2(APP_STATE.target.x - eyePos.x, APP_STATE.target.z - eyePos.z), Math.atan2(APP_STATE.target.y - eyePos.y, APP_STATE.target.z - eyePos.z));
+      const res = getRecruitment(i.isR, Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z), Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z));
       i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
       MUSCLES.forEach(m => {
         const cache = uiCache[i.s][m];
