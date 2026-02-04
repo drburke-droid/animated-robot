@@ -79,13 +79,13 @@ function updateUIStyles() {
 }
 
 function initUI() {
-  const sides = [{ id: "musclesR", key: "right", label: "OD (Right)" }, { id: "musclesL", key: "left", label: "OS (Left)" }];
+  const sides = [{ id: "musclesR", key: "right", label: "OD (Right Eye)" }, { id: "musclesL", key: "left", label: "OS (Left Eye)" }];
   sides.forEach(s => {
     const el = document.getElementById(s.id);
-    el.innerHTML = `<div style="color:#4cc9f0; font-weight:bold; margin-bottom:5px;">${s.label}</div>`;
+    el.innerHTML = `<div style="color:#4cc9f0; font-weight:bold; margin-bottom:8px; border-bottom:1px solid #333;">${s.label}</div>`;
     MUSCLES.forEach(m => {
       const row = document.createElement("div"); row.className = "row";
-      row.innerHTML = `<div class="m-label m-label-${m}" onclick="toggleState(null, '${s.key}', '${m}')">${m}</div><div class="barWrap"><div class="bar"></div></div><div class="pct">0%</div>`;
+      row.innerHTML = `<div class="m-label m-label-${m}" onclick="toggleState(null, '${s.key}', '${m}')" style="cursor:pointer">${m}</div><div class="barWrap"><div class="bar"></div></div><div class="pct">0%</div>`;
       el.appendChild(row);
       uiCache[s.key][m] = { bar: row.querySelector(".bar"), pct: row.querySelector(".pct") };
     });
@@ -128,15 +128,25 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
 
   const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
   
-  // Refined vertical responsiveness for inferior gaze
-  const mY = targetPitch > 0 ? 
-    (isNasal ? targetPitch * h.IO : targetPitch * h.SR * 1.4) : 
-    (isNasal ? targetPitch * h.SO : targetPitch * h.IR * 1.6);
+  // ANATOMICAL FIX: Superior Oblique (SO) and Inferior Rectus (IR) Depressor Balance
+  // SO is the primary depressor only in ADduction (nasal gaze).
+  // IR is the primary depressor in ABduction (temporal gaze).
+  let mY;
+  if (targetPitch > 0) { // Elevation
+    mY = isNasal ? targetPitch * h.IO : targetPitch * h.SR * 1.4;
+  } else { // Depression
+    mY = isNasal ? targetPitch * h.SO : targetPitch * h.IR * 1.6;
+  }
 
   const fYaw = allowedYaw + (isRight ? -driftX : driftX);
   const fPit = mY + driftY;
   const abd = isRight ? -fYaw : fYaw;
   const add = -abd;
+
+  // Percentage Calculations for bars (Capped at 100%)
+  // SO effort must drop when eye moves Temporal (Abduction)
+  const soEffortBase = Math.max(0, -fPit) * 2.0;
+  const soTemporalInhibition = isNasal ? 1.0 : 0.25; 
 
   return {
     rotation: { y: fYaw, x: fPit },
@@ -144,9 +154,9 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
       LR: (0.2 + Math.max(0, abd) * 1.8) * h.LR,
       MR: (0.2 + Math.max(0, add) * 1.8) * h.MR,
       SR: (0.2 + Math.max(0, fPit) * 2.2) * h.SR,
-      IR: (0.2 + Math.max(0, -fPit) * 2.0) * h.IR,
-      IO: (0.2 + Math.max(0, fPit) * 2.0) * h.IO,
-      SO: (0.2 + Math.max(0, -fPit) * 2.0) * h.SO
+      IR: (0.2 + Math.max(0, -fPit) * 2.0 * (isNasal ? 0.5 : 1.0)) * h.IR,
+      IO: (0.2 + Math.max(0, fPit) * 2.0 * (isNasal ? 1.0 : 0.5)) * h.IO,
+      SO: (0.2 + soEffortBase * soTemporalInhibition) * h.SO
     }
   };
 }
@@ -184,7 +194,7 @@ initUI();
 
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene; 
-  model.position.y = -0.6; // Raised position
+  model.position.y = -0.6; 
   model.scale.setScalar(1.8 / new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y);
   model.traverse(o => {
     if (o.name === "Eye_L") eyeL = o; if (o.name === "Eye_R") eyeR = o;
@@ -203,10 +213,14 @@ function animate() {
   [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
     if (!i.mesh) return;
     const eyePos = new THREE.Vector3(); i.mesh.getWorldPosition(eyePos);
-    const yaw = Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z);
+    
+    // CALIBRATION FIX: Offset primary position slightly to fix alignment
+    const yaw = Math.atan2(targetVec.x - (eyePos.x * 1.05), targetVec.z - eyePos.z);
     const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
+    
     const res = getRecruitment(i.isR, yaw, pitch);
     i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
+    
     MUSCLES.forEach(m => {
       const cache = uiCache[i.s][m];
       const valDisplay = Math.min(100, Math.round((res.acts[m] / 0.7) * 100));
