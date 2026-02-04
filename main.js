@@ -31,7 +31,7 @@ const PATHOLOGIES = {
   "Parinaud": { s: ['B'], prev: "0.1", desc: "Dorsal Midbrain Syndrome. Often caused by pineal gland tumors. Prevents upward gaze and causes convergence-retraction nystagmus.", f: () => { ['right','left'].forEach(s => { SYSTEM_STATE.muscles[s].SR = 0; SYSTEM_STATE.muscles[s].IO = 0; }); }},
   "Miller Fisher": { s: ['B'], prev: "0.05", desc: "A rare variant of Guillain-Barré Syndrome (GBS). Causes acute, symmetrical paralysis of all eye movements and loss of reflexes.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
   "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "Lateral Medullary Syndrome (PICA Artery stroke). Causes skew deviation (one eye sits higher), Horner's syndrome, and balance loss.", f: (side) => { 
-    const isR = side === 'right'; 
+    const isR = side === 'right';
     SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; 
     SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
   }},
@@ -69,6 +69,7 @@ window.toggleState = (id, side = null, m = null) => {
 };
 
 window.closeModal = () => document.getElementById('side-modal').style.display = 'none';
+
 window.applyPathology = (side) => {
   resetSystem();
   PATHOLOGIES[activePathName].f(side);
@@ -149,12 +150,15 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     else allowedYaw = targetYaw * h.MR;
   }
 
+  // ANATOMICAL FIX: Nasal factor smoothly scales SO depession vs IR depression
+  const nasalYaw = isRight ? targetYaw : -targetYaw;
+  const nasalFactor = THREE.MathUtils.clamp((nasalYaw + 0.5) / 1.0, 0, 1);
+
   let allowedPitch;
-  const isNasal = (isRight && targetYaw > 0) || (!isRight && targetYaw < 0);
   if (targetPitch > 0) {
-     allowedPitch = isNasal ? targetPitch * h.IO : targetPitch * h.SR;
+     allowedPitch = nasalFactor > 0.5 ? targetPitch * h.IO : targetPitch * h.SR;
   } else {
-     allowedPitch = isNasal ? targetPitch * h.SO : targetPitch * h.IR;
+     allowedPitch = nasalFactor > 0.5 ? targetPitch * h.SO : targetPitch * h.IR;
   }
 
   const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
@@ -169,10 +173,10 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     acts: {
       LR: (0.2 + Math.max(0, abd) * range) * h.LR,
       MR: (0.2 + Math.max(0, add) * range) * h.MR,
-      SR: (0.2 + Math.max(0, finalPitch) * 2.2) * h.SR,
-      IR: (0.2 + Math.max(0, -finalPitch) * 1.8) * h.IR,
-      IO: (0.2 + Math.max(0, finalPitch) * 2.0) * h.IO,
-      SO: (0.2 + Math.max(0, -finalPitch) * 1.8) * h.SO
+      SR: (0.2 + Math.max(0, finalPitch) * 2.2 * (1 - nasalFactor)) * h.SR,
+      IR: (0.2 + Math.max(0, -finalPitch) * 1.8 * (1 - nasalFactor)) * h.IR,
+      IO: (0.2 + Math.max(0, finalPitch) * 2.0 * nasalFactor) * h.IO,
+      SO: (0.2 + Math.max(0, -finalPitch) * 1.8 * nasalFactor) * h.SO
     }
   };
 }
