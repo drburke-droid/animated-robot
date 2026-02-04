@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MUSCLES = ["LR", "MR", "SR", "IR", "SO", "IO"];
-const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, headTilt: 0 };
+const APP_STATE = { ready: false, hasPointer: false, zoom: 6.5, target: new THREE.Vector3() };
 const uiCache = { left: {}, right: {} };
 
 const SYSTEM_STATE = {
@@ -14,25 +14,26 @@ const SYSTEM_STATE = {
 };
 
 const PATHOLOGIES = {
-  "CN III Palsy": { s: ['R', 'L', 'B'], prev: "0.4", desc: "Oculomotor nerve palsy. Causes a 'down-and-out' eye position.", f: (side) => setNerve(side, 3, 0) },
-  "CN IV Palsy": { s: ['R', 'L', 'B'], prev: "0.5", desc: "Trochlear nerve palsy affecting the SO.", f: (side) => setNerve(side, 4, 0) },
-  "CN VI Palsy": { s: ['R', 'L', 'B'], prev: "1.1", desc: "Abducens nerve palsy. Blocks abduction.", f: (side) => setNerve(side, 6, 0) },
-  "INO (MLF)": { s: ['R', 'L', 'B'], prev: "0.3", desc: "Internuclear Ophthalmoplegia.", f: (side) => {
+  "CN III Palsy": { s: ['R', 'L', 'B'], f: (side) => setNerve(side, 3, 0) },
+  "CN IV Palsy": { s: ['R', 'L', 'B'], f: (side) => setNerve(side, 4, 0) },
+  "CN VI Palsy": { s: ['R', 'L', 'B'], f: (side) => setNerve(side, 6, 0) },
+  "INO (MLF)": { s: ['R', 'L', 'B'], f: (side) => {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease.", f: (side) => {
-    const t = side === 'both' ? ['right','left'] : [side];
-    t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
+  "Graves (TED)": { s: ['R', 'L', 'B'], f: (side) => {
+    const t = side==='both'?['right','left']:[side];
+    t.forEach(s=>{ SYSTEM_STATE.muscles[s].IR=0.3; SYSTEM_STATE.muscles[s].MR=0.5; });
   }},
-  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture trapping the IR muscle.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
-  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
-  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
-  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "PICA stroke skew deviation.", f: (side) => { 
-    const isR = side === 'right';
-    SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
+  "Blowout Fx": { s: ['R', 'L'], f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
+  "Brown Syn.": { s: ['R', 'L'], f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
+  "Miller Fisher": { s: ['B'], f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k=>SYSTEM_STATE.nerves[k]=0.1); }},
+  "Wallenberg": { s: ['R', 'L'], f: (side) => { 
+    const isR = side === 'right'; SYSTEM_STATE.muscles[isR?'right':'left'].IR=0.5; SYSTEM_STATE.muscles[isR?'left':'right'].SR=0.5; 
   }}
 };
+
+let activePathName = null;
 
 function setNerve(side, num, val) {
   if(side === 'both') { SYSTEM_STATE.nerves['R-CN'+num] = val; SYSTEM_STATE.nerves['L-CN'+num] = val; }
@@ -89,7 +90,7 @@ function initUI() {
     });
   });
 
-  const grid = document.getElementById('pathology-grid'); if(!grid) return;
+  const grid = document.getElementById('pathology-grid');
   Object.keys(PATHOLOGIES).forEach(name => {
     const btn = document.createElement('div'); btn.className = 'pill clickable'; btn.innerText = name;
     btn.onclick = () => {
@@ -122,29 +123,29 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
 
   let allowedYaw = isRight ? (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) : (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
 
-  // --- SMOOTHING FIX: Sigmoid Blending for SO vs IR ---
+  // --- VERTICAL BLENDING REFINEMENT ---
   const nasalYaw = isRight ? targetYaw : -targetYaw;
-  const blend = 1 / (1 + Math.exp(-(nasalYaw + 0.2) * 8)); // 0 = Temporal(IR), 1 = Nasal(SO)
+  const blend = 1 / (1 + Math.exp(-(nasalYaw + 0.15) * 7)); // Smooth authority gradient
 
-  let verticalCommand;
-  if (targetPitch > 0) { // Up
-    verticalCommand = THREE.MathUtils.lerp(targetPitch * h.SR, targetPitch * h.IO, blend);
-  } else { // Down (Boosted responsiveness with 2.2 multiplier)
-    verticalCommand = THREE.MathUtils.lerp(targetPitch * h.IR * 2.2, targetPitch * h.SO * 2.2, blend);
+  let mY;
+  if (targetPitch > 0) { // Elevation Authority
+    mY = THREE.MathUtils.lerp(targetPitch * h.SR * 1.4, targetPitch * h.IO * 1.4, blend);
+  } else { // Depression Authority
+    mY = THREE.MathUtils.lerp(targetPitch * h.IR * 2.2, targetPitch * h.SO * 2.2, blend);
   }
 
-  const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
-  const finalPitch = verticalCommand + driftY;
+  const fYaw = allowedYaw + (isRight ? -driftX : driftX);
+  const fPit = mY + driftY;
 
   return {
-    rotation: { y: finalYaw, x: finalPitch },
+    rotation: { y: fYaw, x: fPit },
     acts: {
-      LR: (0.2 + Math.max(0, isRight ? -finalYaw : finalYaw) * 1.8) * h.LR,
-      MR: (0.2 + Math.max(0, isRight ? finalYaw : -finalYaw) * 1.8) * h.MR,
-      SR: (0.2 + Math.max(0, finalPitch) * 2.2 * (1 - blend)) * h.SR,
-      IR: (0.2 + Math.max(0, -finalPitch) * 1.8 * (1 - blend)) * h.IR,
-      IO: (0.2 + Math.max(0, finalPitch) * 2.0 * blend) * h.IO,
-      SO: (0.2 + Math.max(0, -finalPitch) * 1.8 * blend + (h.IR === 0 ? 0.3 : 0)) * h.SO
+      LR: (0.2 + Math.max(0, isRight ? -fYaw : fYaw) * 1.8) * h.LR,
+      MR: (0.2 + Math.max(0, isRight ? fYaw : -fYaw) * 1.8) * h.MR,
+      SR: (0.2 + Math.max(0, fPit) * 2.2 * (1 - blend)) * h.SR,
+      IR: (0.2 + Math.max(0, -fPit) * 1.8 * (1 - blend)) * h.IR,
+      IO: (0.2 + Math.max(0, fPit) * 2.0 * blend) * h.IO,
+      SO: (0.2 + Math.max(0, -fPit) * 1.8 * blend + (h.IR === 0 ? 0.3 : 0)) * h.SO
     }
   };
 }
@@ -159,11 +160,10 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0, 0.5));
 const penlight = new THREE.PointLight(0xffffff, 80, 10);
 scene.add(penlight);
 
-const targetVec = new THREE.Vector3();
 window.addEventListener("pointermove", (e) => {
   const m = { x: (e.clientX/window.innerWidth)*2-1, y: -(e.clientY/window.innerHeight)*2+1 };
   const r = new THREE.Raycaster(); r.setFromCamera(m, camera);
-  r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), -2.5), targetVec);
+  r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), -2.5), APP_STATE.target);
   APP_STATE.hasPointer = true;
 });
 
@@ -178,19 +178,16 @@ new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   scene.add(model);
   
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initUI); } else { initUI(); }
-  
   document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
 
   function animate() {
     requestAnimationFrame(animate);
     if (!APP_STATE.ready || !APP_STATE.hasPointer) return;
-    penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
-    if (model) model.rotation.z = APP_STATE.headTilt;
-
+    penlight.position.set(APP_STATE.target.x, APP_STATE.target.y, APP_STATE.target.z + 0.6);
     [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
       const eyePos = new THREE.Vector3(); i.mesh.getWorldPosition(eyePos);
-      const res = getRecruitment(i.isR, Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z), Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z));
+      const res = getRecruitment(i.isR, Math.atan2(APP_STATE.target.x - eyePos.x, APP_STATE.target.z - eyePos.z), Math.atan2(APP_STATE.target.y - eyePos.y, APP_STATE.target.z - eyePos.z));
       i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
       MUSCLES.forEach(m => {
         const cache = uiCache[i.s][m];
