@@ -16,7 +16,7 @@
     
     #dr-credit {
       position: fixed; bottom: 10px; right: 15px;
-      font-size: 11px; color: rgba(76, 201, 240, 0.6);
+      font-size: 10px; color: rgba(76, 201, 240, 0.6);
       z-index: 100; pointer-events: none;
     }
 
@@ -29,7 +29,7 @@
     .menu-btn {
       background: rgba(20, 20, 20, 0.9); border: 1px solid #4cc9f0;
       color: #4cc9f0; padding: 12px; border-radius: 8px;
-      font-weight: bold; text-align: center; font-size: 14px; cursor: pointer;
+      font-weight: bold; text-align: center; font-size: 14px;
     }
 
     .dropdown-content {
@@ -42,26 +42,20 @@
     .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 
     #side-hud {
-      position: fixed; inset: 0;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0 30px; pointer-events: none; z-index: 500;
+      position: fixed; bottom: 35px; left: 0; width: 100%;
+      display: flex; flex-direction: column; gap: 5px;
+      padding: 0 10px; pointer-events: none; z-index: 500;
     }
-
     .muscle-panel {
-      width: 440px; background: rgba(10, 10, 10, 0.85); padding: 15px;
-      border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1);
-      pointer-events: auto; font-size: 12px;
-    }
-
-    @media (max-width: 900px) {
-      #side-hud { flex-direction: column; justify-content: flex-end; bottom: 35px; top: auto; padding: 10px; gap: 5px; }
-      .muscle-panel { width: 100%; font-size: 10px; padding: 8px; }
+      background: rgba(10, 10, 10, 0.8); padding: 8px;
+      border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);
+      pointer-events: auto; font-size: 10px;
     }
 
     .pill { 
       padding: 10px 5px; border-radius: 4px; border: 1px solid #4cc9f0; 
       background: rgba(76, 201, 240, 0.05); font-weight: bold; 
-      font-size: 11px; color: #4cc9f0; text-align: center; cursor: pointer;
+      font-size: 11px; color: #4cc9f0; text-align: center;
     }
 
     #gaze-dot {
@@ -74,9 +68,9 @@
     .paresis { color: #ffb703 !important; border-color: #ffb703 !important; }
     .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; text-decoration: line-through; }
     
-    .row { display: grid; grid-template-columns: 40px 1fr 40px; gap: 10px; align-items: center; margin-bottom: 4px; }
-    .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
-    .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s; }
+    .row { display: grid; grid-template-columns: 30px 1fr 30px; gap: 5px; align-items: center; }
+    .barWrap { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+    .bar { height: 100%; width: 0%; background: #4cc9f0; }
   </style>
 </head>
 <body>
@@ -111,6 +105,18 @@
   <div id="side-hud">
     <div class="muscle-panel" id="musclesR"></div>
     <div class="muscle-panel" id="musclesL"></div>
+  </div>
+
+  <div id="side-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:10000; align-items:center; justify-content:center;">
+    <div style="background:#111; padding:20px; border-radius:15px; text-align:center; border:1px solid #4cc9f0;">
+      <h3 id="modal-disease-name" style="color:#4cc9f0;">LATERALITY</h3>
+      <div style="display:flex; gap:10px; margin:20px 0;">
+        <div class="pill" style="flex:1" onclick="applyPathology('right')">RIGHT</div>
+        <div class="pill" style="flex:1" onclick="applyPathology('both')">BOTH</div>
+        <div class="pill" style="flex:1" onclick="applyPathology('left')">LEFT</div>
+      </div>
+      <div style="color:#ff4d6d; font-weight:bold;" onclick="document.getElementById('side-modal').style.display='none'">CANCEL</div>
+    </div>
   </div>
 
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
