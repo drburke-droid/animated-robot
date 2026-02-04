@@ -21,29 +21,18 @@ const PATHOLOGIES = {
     if(side==='right'||side==='both') SYSTEM_STATE.muscles.right.MR = 0;
     if(side==='left'||side==='both') SYSTEM_STATE.muscles.left.MR = 0;
   }},
-  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. An autoimmune swelling of the muscles. Typically restricts the Inferior Rectus and Medial Rectus first.", f: (side) => {
+  "Graves (TED)": { s: ['R', 'L', 'B'], prev: "2.5", desc: "Thyroid Eye Disease. An autoimmune swelling of the muscles. Typically restricts the IR and MR first.", f: (side) => {
     const t = side === 'both' ? ['right','left'] : [side];
     t.forEach(s => { SYSTEM_STATE.muscles[s].IR = 0.3; SYSTEM_STATE.muscles[s].MR = 0.5; });
   }},
-  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture. The Inferior Rectus muscle becomes physically trapped in the bone, preventing upward gaze.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
-  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "Mechanical restriction of the Superior Oblique tendon. Prevents the eye from looking up when it is turned inward toward the nose.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
-  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis. An autoimmune breakdown of communication between nerves and muscles. Characterized by fluctuating fatigue and weakness.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
-  "Parinaud": { s: ['B'], prev: "0.1", desc: "Dorsal Midbrain Syndrome. Often caused by pineal gland tumors. Prevents upward gaze and causes convergence-retraction nystagmus.", f: () => { ['right','left'].forEach(s => { SYSTEM_STATE.muscles[s].SR = 0; SYSTEM_STATE.muscles[s].IO = 0; }); }},
-  "Miller Fisher": { s: ['B'], prev: "0.05", desc: "A rare variant of Guillain-Barré Syndrome (GBS). Causes acute, symmetrical paralysis of all eye movements and loss of reflexes.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
-  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "Lateral Medullary Syndrome (PICA Artery stroke). Causes skew deviation (one eye sits higher), Horner's syndrome, and balance loss.", f: (side) => { 
+  "Blowout Fx": { s: ['R', 'L'], prev: "0.8", desc: "Orbital floor fracture trapping the IR muscle.", f: (side) => { SYSTEM_STATE.muscles[side].IR = 0; }},
+  "Brown Syn.": { s: ['R', 'L'], prev: "0.2", desc: "SO tendon restriction; prevents elevation in adduction.", f: (side) => { SYSTEM_STATE.muscles[side].IO = 0; }},
+  "Myasthenia": { s: ['B'], prev: "2.0", desc: "Myasthenia Gravis. Fluctuating NMJ fatigue.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.4); }},
+  "Miller Fisher": { s: ['B'], prev: "0.05", desc: "GBS variant causing symmetrical eye paralysis.", f: () => { Object.keys(SYSTEM_STATE.nerves).forEach(k => SYSTEM_STATE.nerves[k] = 0.1); }},
+  "Wallenberg": { s: ['R', 'L'], prev: "0.2", desc: "PICA stroke. Causes skew deviation and Horner's syndrome.", f: (side) => { 
     const isR = side === 'right';
     SYSTEM_STATE.muscles[isR?'right':'left'].IR = 0.5; 
     SYSTEM_STATE.muscles[isR?'left':'right'].SR = 0.5; 
-  }},
-  "AICA Stroke": { s: ['R', 'L'], prev: "0.1", desc: "Anterior Inferior Cerebellar Artery stroke. Often involves the CN VI nucleus and CN VII (facial) nerve, causing total gaze palsy to one side.", f: (side) => { setNerve(side, 6, 0); }},
-  "Foville Syn.": { s: ['R', 'L'], prev: "0.05", desc: "Brainstem lesion (Pons). Causes a combination of CN VI palsy, CN VII palsy (facial droop), and a loss of all horizontal gaze toward the lesion.", f: (side) => { setNerve(side, 6, 0); setNerve(side, 3, 0.5); }},
-  "Weber Syn.": { s: ['R', 'L'], prev: "0.1", desc: "Midbrain stroke. Causes a CN III palsy on the side of the stroke and weakness on the opposite side of the body.", f: (side) => { setNerve(side, 3, 0); }},
-  "Bielschowsky": { s: ['R', 'L'], prev: "0.5", desc: "Clinical sign of a CN IV (Trochlear) palsy. The upward drift of the eye worsens when the head is tilted toward the side of the palsy.", f: (side) => { setNerve(side, 4, 0); }},
-  "One-and-a-Half": { s: ['R', 'L'], prev: "0.1", desc: "Complex brainstem lesion. One eye is completely fixed horizontally; the other eye can only move outward (abduct).", f: (side) => {
-    const isR = side === 'right';
-    setNerve(side, 6, 0);
-    SYSTEM_STATE.muscles.right.MR = 0;
-    SYSTEM_STATE.muscles.left.MR = 0;
   }}
 };
 
@@ -110,13 +99,6 @@ function initUI() {
   if (!grid) return;
   Object.keys(PATHOLOGIES).forEach(name => {
     const btn = document.createElement('div'); btn.className = 'pill clickable'; btn.innerText = name;
-    btn.onmouseover = (e) => {
-      const p = PATHOLOGIES[name];
-      tooltip.innerHTML = `<div class="tt-title">${name}</div><div class="tt-stat">Prev: ~${p.prev}/10k patients</div><div>${p.desc}</div>`;
-      tooltip.style.display = 'block';
-      tooltip.style.left = e.pageX + 10 + 'px'; tooltip.style.top = e.pageY + 10 + 'px';
-    };
-    btn.onmouseout = () => tooltip.style.display = 'none';
     btn.onclick = () => {
       activePathName = name;
       document.getElementById('side-modal').style.display = 'flex';
@@ -127,11 +109,7 @@ function initUI() {
     };
     grid.appendChild(btn);
   });
-  
-  const hud = document.getElementById("hud-container");
-  if (hud) hud.style.opacity = "1";
-  const tilt = document.getElementById("tiltSlider");
-  if (tilt) tilt.oninput = (e) => APP_STATE.headTilt = THREE.MathUtils.degToRad(e.target.value);
+  document.getElementById("hud-container").style.opacity = "1";
 }
 
 function getRecruitment(isRight, targetYaw, targetPitch) {
@@ -146,7 +124,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // Basal Tone & Drift: Unopposed SO and LR pull eye Down and Out in CN III palsy
+  // BASAL TONE: Unopposed SO and LR pull Down and Out in complete CN III palsy
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.1 + (1 - h.IR) * 0.1 + (h.SR === 0 && h.IR === 0 ? -0.25 : 0);
 
@@ -154,32 +132,24 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) :
     (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
 
-  // Anatomical scaling: SO depression is primary in adduction
-  const nasalYaw = isRight ? targetYaw : -targetYaw;
-  const nasalFactor = THREE.MathUtils.clamp((nasalYaw + 0.5) / 1.0, 0, 1);
+  const nasalFactor = THREE.MathUtils.clamp(((isRight ? targetYaw : -targetYaw) + 0.5), 0, 1);
 
-  let allowedPitch;
-  if (targetPitch > 0) {
-     allowedPitch = nasalFactor > 0.5 ? targetPitch * h.IO : targetPitch * h.SR;
-  } else {
-     allowedPitch = nasalFactor > 0.5 ? targetPitch * h.SO : targetPitch * h.IR;
-  }
+  let allowedPitch = targetPitch > 0 ? 
+    (nasalFactor > 0.5 ? targetPitch * h.IO : targetPitch * h.SR) : 
+    (nasalFactor > 0.5 ? targetPitch * h.SO : targetPitch * h.IR);
 
-  const finalYaw = allowedYaw + (isRight ? -driftX : driftX);
-  const finalPitch = allowedPitch + driftY;
-
-  const abd = isRight ? -finalYaw : finalYaw;
-  const add = -abd;
+  const fYaw = allowedYaw + (isRight ? -driftX : driftX);
+  const fPit = allowedPitch + driftY;
 
   return {
-    rotation: { y: finalYaw, x: finalPitch },
+    rotation: { y: fYaw, x: fPit },
     acts: {
-      LR: (0.2 + Math.max(0, abd) * 1.8) * h.LR,
-      MR: (0.2 + Math.max(0, add) * 1.8) * h.MR,
-      SR: (0.2 + Math.max(0, finalPitch) * 2.2 * (1 - nasalFactor)) * h.SR,
-      IR: (0.2 + Math.max(0, -finalPitch) * 1.8 * (1 - nasalFactor)) * h.IR,
-      IO: (0.2 + Math.max(0, finalPitch) * 2.0 * nasalFactor) * h.IO,
-      SO: (0.2 + Math.max(0, -finalPitch) * 1.8 * nasalFactor + (h.IR === 0 ? 0.3 : 0)) * h.SO
+      LR: (0.2 + Math.max(0, isRight ? -fYaw : fYaw) * 1.8) * h.LR,
+      MR: (0.2 + Math.max(0, isRight ? fYaw : -fYaw) * 1.8) * h.MR,
+      SR: (0.2 + Math.max(0, fPit) * 2.2 * (1 - nasalFactor)) * h.SR,
+      IR: (0.2 + Math.max(0, -fPit) * 1.8 * (1 - nasalFactor)) * h.IR,
+      IO: (0.2 + Math.max(0, fPit) * 2.0 * nasalFactor) * h.IO,
+      SO: (0.2 + Math.max(0, -fPit) * 1.8 * nasalFactor + (h.IR === 0 ? 0.3 : 0)) * h.SO
     }
   };
 }
@@ -194,60 +164,51 @@ scene.add(new THREE.HemisphereLight(0xffffff, 0, 0.5));
 const penlight = new THREE.PointLight(0xffffff, 80, 10);
 scene.add(penlight);
 
-const targetVec = new THREE.Vector3();
-let model, eyeL, eyeR;
-
 window.addEventListener("pointermove", (e) => {
   const m = { x: (e.clientX/window.innerWidth)*2-1, y: -(e.clientY/window.innerHeight)*2+1 };
   const r = new THREE.Raycaster(); r.setFromCamera(m, camera);
+  const targetVec = new THREE.Vector3();
   r.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), -2.5), targetVec);
+  APP_STATE.target = targetVec;
   APP_STATE.hasPointer = true;
 });
 
-// Initialization fix for loading screens
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initUI);
-} else {
-  initUI();
-}
-
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
-  model = gltf.scene; model.position.y = -1.6;
+  const model = gltf.scene; model.position.y = -1.6;
   model.scale.setScalar(1.8 / new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y);
+  let eyeL, eyeR;
   model.traverse(o => {
     if (o.name === "Eye_L") eyeL = o; if (o.name === "Eye_R") eyeR = o;
     if (o.name.toLowerCase().includes("cornea")) o.material = new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0 });
   });
   scene.add(model);
-  const loader = document.getElementById("loading");
-  if(loader) loader.style.display = "none";
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initUI);
+  } else {
+    initUI();
+  }
+  
+  document.getElementById("loading").style.display = "none";
   APP_STATE.ready = true;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    if (!APP_STATE.ready || !APP_STATE.hasPointer) return;
+    penlight.position.set(APP_STATE.target.x, APP_STATE.target.y, APP_STATE.target.z + 0.6);
+    
+    [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
+      const eyePos = new THREE.Vector3(); i.mesh.getWorldPosition(eyePos);
+      const res = getRecruitment(i.isR, Math.atan2(APP_STATE.target.x - eyePos.x, APP_STATE.target.z - eyePos.z), Math.atan2(APP_STATE.target.y - eyePos.y, APP_STATE.target.z - eyePos.z));
+      i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
+      MUSCLES.forEach(m => {
+        const cache = uiCache[i.s][m];
+        const valDisplay = Math.min(100, Math.round((res.acts[m] / 0.7) * 100));
+        cache.bar.style.width = valDisplay + "%"; cache.pct.innerText = valDisplay + "%";
+        cache.bar.style.background = res.acts[m] < 0.05 ? "#ff4d6d" : (res.acts[m] < 0.25 ? "#ffb703" : "#4cc9f0");
+      });
+    });
+    renderer.render(scene, camera);
+  }
   animate();
 });
-
-function animate() {
-  if (!APP_STATE.ready) return;
-  requestAnimationFrame(animate);
-  if (APP_STATE.hasPointer) penlight.position.set(targetVec.x, targetVec.y, targetVec.z + 0.6);
-  if (model) model.rotation.z = APP_STATE.headTilt;
-
-  [ {mesh: eyeL, isR: false, s: "left"}, {mesh: eyeR, isR: true, s: "right"} ].forEach(i => {
-    if (!i.mesh) return;
-    const eyePos = new THREE.Vector3();
-    i.mesh.getWorldPosition(eyePos);
-    const yaw = Math.atan2(targetVec.x - eyePos.x, targetVec.z - eyePos.z);
-    const pitch = Math.atan2(targetVec.y - eyePos.y, targetVec.z - eyePos.z);
-    const res = getRecruitment(i.isR, yaw, pitch);
-    i.mesh.rotation.set(-res.rotation.x, res.rotation.y, 0, 'YXZ');
-
-    MUSCLES.forEach(m => {
-      const cache = uiCache[i.s][m];
-      const valRaw = res.acts[m];
-      const valDisplay = Math.min(100, Math.round((valRaw / 0.7) * 100));
-      cache.bar.style.width = valDisplay + "%";
-      cache.pct.innerText = valDisplay + "%";
-      cache.bar.style.background = valRaw < 0.05 ? "#ff4d6d" : (valRaw < 0.25 ? "#ffb703" : "#4cc9f0");
-    });
-  });
-  renderer.render(scene, camera);
-}
