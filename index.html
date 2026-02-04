@@ -6,22 +6,43 @@
   <title>Neuro-Ophthalmology Simulator - Dr. Robert Burke</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; }
-    #app { position: fixed; inset: 0; }
+    #app { position: fixed; inset: 0; z-index: 1; }
     #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 5000; font-family: monospace; }
-    #dr-credit { position: fixed; bottom: 15px; right: 20px; font-size: 13px; color: rgba(76, 201, 240, 0.8); font-weight: bold; z-index: 2000; pointer-events: none; }
+    
+    #dr-credit {
+      position: fixed; bottom: 15px; right: 20px; font-size: 13px; color: rgba(76, 201, 240, 0.8);
+      font-weight: bold; letter-spacing: 1px; z-index: 2000; pointer-events: none;
+    }
+
+    /* HUD Layering Fixes */
     #hud-container { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: flex; flex-direction: column; padding: 10px; opacity: 0; transition: opacity 1s ease; }
-    #top-ribbon { align-self: center; width: 98%; display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
-    .pathology-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; background: rgba(10,10,10,0.85); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+    
+    #top-ribbon { 
+      align-self: center; width: 98%; display: flex; flex-direction: column; gap: 5px; 
+      pointer-events: auto; /* Ensures pathology and CN buttons are clickable */
+    }
+    
+    .pathology-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; background: rgba(10,10,10,0.9); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
     .cn-ribbon { display: flex; justify-content: center; gap: 25px; background: rgba(15,15,15,0.9); padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
-    #side-hud { position: absolute; top: 55%; left: 0; width: 100%; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; }
-    .muscle-panel { width: 480px; background: rgba(10, 10, 10, 0.85); border-radius: 12px; padding: 18px; border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-    .pill { padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 10px; color: #4cc9f0; text-align: center; cursor: pointer; pointer-events: auto; }
-    .reset-btn { background: #ff4d6d; color: white; border: none; padding: 5px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; pointer-events: auto; font-size: 10px; }
+    
+    #side-hud { position: absolute; top: 55%; left: 0; width: 100%; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box; pointer-events: none; }
+    .muscle-panel { 
+      width: 460px; background: rgba(10, 10, 10, 0.85); border-radius: 12px; padding: 18px; 
+      border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); 
+      pointer-events: auto; /* Ensures muscle bars are clickable */
+    }
+
+    .pill { padding: 5px 8px; border-radius: 4px; border: 1px solid #4cc9f0; background: rgba(76, 201, 240, 0.05); font-weight: bold; font-size: 10px; color: #4cc9f0; text-align: center; cursor: pointer; transition: 0.2s; }
+    .pill:hover { background: rgba(76, 201, 240, 0.2); }
+    .reset-btn { background: #ff4d6d; color: white; border: none; padding: 5px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 10px; }
+    
     .row { display: grid; grid-template-columns: 40px 1fr 50px; gap: 12px; align-items: center; margin: 8px 0; }
     .barWrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; }
     .bar { height: 100%; width: 0%; background: #4cc9f0; transition: width 0.1s ease-out; }
+    
     .paresis { color: #ffb703 !important; border-color: #ffb703 !important; background: rgba(255, 183, 3, 0.15) !important; }
     .paralysis { color: #ff4d6d !important; border-color: #ff4d6d !important; background: rgba(255, 77, 109, 0.15) !important; text-decoration: line-through; }
+    
     #side-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 6000; align-items: center; justify-content: center; pointer-events: auto; }
     .modal-box { background: #111; padding: 30px; border-radius: 15px; border: 1px solid #333; text-align: center; }
   </style>
@@ -47,7 +68,7 @@
     <div id="top-ribbon">
       <div class="pathology-grid" id="pathology-grid"></div>
       <div class="cn-ribbon">
-        <button class="reset-btn" onclick="resetSystem()">RESET ALL SELECTIONS</button>
+        <button class="reset-btn" onclick="resetSystem()">RESET ALL</button>
         <div style="display:flex; gap:10px; align-items:center;">
           <span style="font-size:10px; color:#888;">OD:</span>
           <div class="pill" id="R-CN3" onclick="toggleState('R-CN3')">CN III</div>
