@@ -96,7 +96,7 @@ function initUI() {
   const sides = [{ id: "musclesR", key: "right", label: "Right Eye (OD)" }, { id: "musclesL", key: "left", label: "Left Eye (OS)" }];
   sides.forEach(s => {
     const el = document.getElementById(s.id);
-    if(!el) return;
+    if (!el) return;
     el.innerHTML = `<div style="color:#4cc9f0; font-size:12px; font-weight:900; margin-bottom:10px;">${s.label}</div>`;
     MUSCLES.forEach(m => {
       const row = document.createElement("div"); row.className = "row";
@@ -107,7 +107,7 @@ function initUI() {
   });
 
   const grid = document.getElementById('pathology-grid');
-  if(!grid) return;
+  if (!grid) return;
   Object.keys(PATHOLOGIES).forEach(name => {
     const btn = document.createElement('div'); btn.className = 'pill clickable'; btn.innerText = name;
     btn.onmouseover = (e) => {
@@ -120,17 +120,18 @@ function initUI() {
     btn.onclick = () => {
       activePathName = name;
       document.getElementById('side-modal').style.display = 'flex';
-      ['R','B','L'].forEach(c => {
-        const sideBtn = document.getElementById('btn-side-'+c);
-        if(sideBtn) sideBtn.style.display = PATHOLOGIES[name].s.includes(c)?'block':'none';
+      ['R', 'B', 'L'].forEach(c => {
+        const sBtn = document.getElementById('btn-side-' + c);
+        if (sBtn) sBtn.style.display = PATHOLOGIES[name].s.includes(c) ? 'block' : 'none';
       });
     };
     grid.appendChild(btn);
   });
+  
   const hud = document.getElementById("hud-container");
-  if(hud) hud.style.opacity = "1";
+  if (hud) hud.style.opacity = "1";
   const tilt = document.getElementById("tiltSlider");
-  if(tilt) tilt.oninput = (e) => APP_STATE.headTilt = THREE.MathUtils.degToRad(e.target.value);
+  if (tilt) tilt.oninput = (e) => APP_STATE.headTilt = THREE.MathUtils.degToRad(e.target.value);
 }
 
 function getRecruitment(isRight, targetYaw, targetPitch) {
@@ -145,7 +146,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     SO: SYSTEM_STATE.nerves[prefix+'CN4'] * SYSTEM_STATE.muscles[side].SO
   };
 
-  // BASAL TONE THEORY: Unopposed SO and LR pull eye Down and Out in CN III palsy [cite: 35, 36, 43]
+  // Basal Tone & Drift: Unopposed SO and LR pull eye Down and Out in CN III palsy
   const driftX = (1 - h.LR) * -0.4 + (1 - h.MR) * 0.4;
   const driftY = (1 - h.SR) * -0.1 + (1 - h.IR) * 0.1 + (h.SR === 0 && h.IR === 0 ? -0.25 : 0);
 
@@ -153,7 +154,7 @@ function getRecruitment(isRight, targetYaw, targetPitch) {
     (targetYaw < 0 ? targetYaw * h.LR : targetYaw * h.MR) :
     (targetYaw > 0 ? targetYaw * h.LR : targetYaw * h.MR);
 
-  // Anatomical scaling: SO depression is primary in adduction [cite: 40, 42]
+  // Anatomical scaling: SO depression is primary in adduction
   const nasalYaw = isRight ? targetYaw : -targetYaw;
   const nasalFactor = THREE.MathUtils.clamp((nasalYaw + 0.5) / 1.0, 0, 1);
 
@@ -203,10 +204,12 @@ window.addEventListener("pointermove", (e) => {
   APP_STATE.hasPointer = true;
 });
 
-// Initialization fix for loading screens [cite: 49, 50]
-window.addEventListener("load", () => {
+// Initialization fix for loading screens
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initUI);
+} else {
   initUI();
-});
+}
 
 new GLTFLoader().load("./head_eyes_v1.glb", (gltf) => {
   model = gltf.scene; model.position.y = -1.6;
